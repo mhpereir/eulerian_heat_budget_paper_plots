@@ -16,6 +16,7 @@ class PlotRequest:
     dataset: str = config.DEFAULT_DATASET
     time_start: str | None = None
     time_end: str | None = None
+    diagnostic_plots: bool = True
     benchmark_diagnostics: BenchmarkDiagnostics = "auto"
     plots_root: Path | str = config.PLOTS_ROOT
 

@@ -47,6 +47,22 @@ FIG5_NET_VARIABLES = (
     "calculated_heat_flux_net_lateral",
     "benchmark_heat_flux_net_lateral_prime",
 )
+BENCHMARK_MASS_CONTINUITY_VARIABLES = (
+    "dV_dt",
+    "dV_dt_true",
+    "net_mass_advection",
+    "benchmark_mass_flux_net",
+)
+CORE_DIAGNOSTIC_VARIABLES = (
+    "dV_dt",
+    "domain_volume",
+    "net_mass_advection",
+    "advection_term",
+    "advection_error",
+    "d_dt_T",
+    "dT_dt",
+    "dT_dt_2",
+)
 ONE_TO_ONE_FIGURE_LAYOUT = {
     "left": 0.15,
     "right": 0.97,
@@ -156,6 +172,59 @@ def _require_dataset_variables(
             f"{context} requires variables missing from heat_budget.nc: "
             f"{', '.join(missing)}"
         )
+
+
+def _advection_terms_for_core_diagnostics(ds_budget: xr.Dataset) -> xr.Dataset:
+    advection_variables = [
+        name
+        for name in ds_budget.data_vars
+        if (
+            name in {"net_mass_advection", "advection_term"}
+            or name.startswith("mass_flux_contribution_") #type: ignore
+            or name.startswith("flux_contribution_") #type: ignore
+        )
+    ]
+    return ds_budget[advection_variables]
+
+
+def plot_core_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
+    """Generate non-benchmark diagnostic figures from a reduced dataset."""
+    _require_dataset_variables(
+        ds_budget,
+        CORE_DIAGNOSTIC_VARIABLES,
+        "Core diagnostics",
+    )
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    advection_terms = _advection_terms_for_core_diagnostics(ds_budget)
+    plot_dir_str = str(plot_path)
+
+    fig1_mass_continuity(
+        ds_budget["dV_dt"],
+        advection_terms,
+        plot_dir_str,
+    )
+    fig2_mass_advection_residual_timeseries(
+        advection_terms,
+        ds_budget["dV_dt"],
+        ds_budget["domain_volume"],
+        plot_dir_str,
+    )
+    # fig3_advection_components_timeseries(
+    #     advection_terms,
+    #     ds_budget["dV_dt"],
+    #     ds_budget["advection_error"],
+    #     ds_budget["domain_volume"],
+    #     plot_dir_str,
+    # )
+    # fig4_temperature_derivative_timeseries(
+    #     ds_budget["d_dt_T"],
+    #     ds_budget["dT_dt"],
+    #     ds_budget["dT_dt_2"],
+    #     ds_budget["domain_volume"],
+    #     plot_dir_str,
+    # )
 
 
 def fig1_mass_continuity(dV_dt: xr.DataArray, advection_terms: xr.Dataset, plot_dir: str):
@@ -393,9 +462,9 @@ def fig2_mass_advection_residual_timeseries(advection_terms: xr.Dataset, dV_dt: 
     
     #check advection_terms['time'] is in the correct format:
     if np.issubdtype(advection_terms['time'].dtype, np.datetime64):
-        print("Time coordinate is in datetime format.")
+        pass
     else:
-        print("Time coordinate is NOT in dneg_atetime format. Check your dataset.")
+        print("Time coordinate is NOT in datetime format. Check your dataset.")
         raise ValueError("Time coordinate is not in datetime format.")
 
     dt = (advection_terms["time"][1] - advection_terms["time"][0]).values / np.timedelta64(1, 's') # convert to seconds
@@ -434,22 +503,22 @@ def fig2_mass_advection_residual_timeseries(advection_terms: xr.Dataset, dV_dt: 
     # epsilon_mass_advection = abs(net) / sum (abs ( advection_per_surface ))
     eps_mass = np.abs( delta_mass) / np.sum(np.abs([advection_terms[mass] for mass in mass_vars]))
 
-    fig, ax = plt.subplots(
-        figsize=_publication_figsize("single", SINGLE_PANEL_ASPECT),
-        tight_layout=True,
-    )
-    ax.plot(advection_terms['time'], eps_mass)
+    # fig, ax = plt.subplots(
+    #     figsize=_publication_figsize("single", SINGLE_PANEL_ASPECT),
+    #     tight_layout=True,
+    # )
+    # ax.plot(advection_terms['time'], eps_mass)
 
-    locator, formatter = _date_locator_formatter()
+    # locator, formatter = _date_locator_formatter()
 
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
+    # ax.xaxis.set_major_locator(locator)
+    # ax.xaxis.set_major_formatter(formatter)
 
-    ax.set_xlabel("Time")
-    ax.set_ylabel("relative error")
-    ax.set_title(r'$|\delta M|/ \sum_{faces} |U\cdot A|$')
-    plt.savefig(plot_dir + '/fig2.1_epsilon_mass_timeseries.png', dpi=300)
-    plt.close()
+    # ax.set_xlabel("Time")
+    # ax.set_ylabel("relative error")
+    # ax.set_title(r'$|\delta M|/ \sum_{faces} |U\cdot A|$')
+    # plt.savefig(plot_dir + '/fig2.1_epsilon_mass_timeseries.png', dpi=300)
+    # plt.close()
 
 
     mass_vars = []
@@ -960,12 +1029,23 @@ def fig5_heat_flux_correlations(
 
 
 def plot_figure5_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
-    """Generate Figures 5, 5.1, 5.2, and 5.3 from one reduced dataset."""
+    """Generate benchmark diagnostics from one reduced dataset."""
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
     _require_dataset_variables(
         ds_budget,
-        FIG5_PER_FACE_VARIABLES + FIG5_NET_VARIABLES,
-        "Figure 5 diagnostics",
+        BENCHMARK_MASS_CONTINUITY_VARIABLES
+        + FIG5_PER_FACE_VARIABLES
+        + FIG5_NET_VARIABLES,
+        "Benchmark diagnostics",
     )
-    fig5_benchmark_comparison(ds_budget, plot_dir)
-    fig5_net_benchmark_comparison(ds_budget, plot_dir)
-    fig5_heat_flux_correlations(ds_budget, plot_dir)
+    fig1_benchmark_mass_continuity(
+        ds_budget["dV_dt"],
+        _advection_terms_for_core_diagnostics(ds_budget),
+        ds_budget["dV_dt_true"],
+        ds_budget["benchmark_mass_flux_net"],
+        str(plot_path),
+    )
+    fig5_benchmark_comparison(ds_budget, plot_path)
+    fig5_net_benchmark_comparison(ds_budget, plot_path)
+    fig5_heat_flux_correlations(ds_budget, plot_path)

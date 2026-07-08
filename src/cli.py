@@ -50,14 +50,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=config.PLOTS_ROOT,
         help=f"Root output directory. Default: {config.PLOTS_ROOT}",
     )
+    diagnostic_group = parser.add_mutually_exclusive_group()
+    diagnostic_group.add_argument(
+        "--diagnostic-plots",
+        dest="diagnostic_plots",
+        action="store_true",
+        default=True,
+        help="Create non-benchmark diagnostic plots in plots/{dataset}/diagnostics/.",
+    )
+    diagnostic_group.add_argument(
+        "--no-diagnostic-plots",
+        dest="diagnostic_plots",
+        action="store_false",
+        help="Skip all diagnostic plots and write only result plots.",
+    )
     parser.add_argument(
         "--benchmark-diagnostics",
         choices=("auto", "on", "off"),
-        default="auto",
+        default="off",
         help=(
-            "Whether to create full-atmosphere benchmark diagnostics. "
+            "Whether to create Figure 5 benchmark diagnostics. "
             "auto enables them for dataset names ending in "
-            f"{config.FULL_ATMOSPHERE_SUFFIX!r}."
+            f"{config.FULL_ATMOSPHERE_SUFFIX!r}. Default: off."
         ),
     )
     parser.add_argument(
@@ -115,15 +129,27 @@ def plot_dataset(request: PlotRequest) -> DatasetPaths:
     try:
         plot_result_figures(ds, paths.results_dir)
 
-        if should_run_benchmark_diagnostics(
+        run_benchmark_diagnostics = should_run_benchmark_diagnostics(
             request.dataset,
             request.benchmark_diagnostics,
-        ):
+        )
+        if run_benchmark_diagnostics and not request.diagnostic_plots:
+            raise ValueError(
+                "--benchmark-diagnostics requires diagnostic plots. "
+                "Use --diagnostic-plots or set --benchmark-diagnostics off."
+            )
+
+        if request.diagnostic_plots:
             paths.diagnostics_dir.mkdir(parents=True, exist_ok=True)
-            plot_diagnostics.plot_figure5_diagnostics(
+            plot_diagnostics.plot_core_diagnostics(
                 ds,
                 plot_dir=str(paths.diagnostics_dir),
             )
+            if run_benchmark_diagnostics:
+                plot_diagnostics.plot_figure5_diagnostics(
+                    ds,
+                    plot_dir=str(paths.diagnostics_dir),
+                )
     finally:
         ds.close()
 
@@ -143,6 +169,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset=args.dataset,
         time_start=args.time_start,
         time_end=args.time_end,
+        diagnostic_plots=args.diagnostic_plots,
         benchmark_diagnostics=args.benchmark_diagnostics,
         plots_root=args.plots_root,
     )
@@ -153,11 +180,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.exit(1, f"{parser.prog}: error: {exc}\n")
 
     print(f"Wrote result plots to {paths.results_dir}")
-    if should_run_benchmark_diagnostics(
-        request.dataset,
-        request.benchmark_diagnostics,
-    ):
+    if request.diagnostic_plots:
         print(f"Wrote diagnostic plots to {paths.diagnostics_dir}")
+    if should_run_benchmark_diagnostics(request.dataset, request.benchmark_diagnostics):
+        print("Wrote benchmark diagnostics")
     return 0
 
 
