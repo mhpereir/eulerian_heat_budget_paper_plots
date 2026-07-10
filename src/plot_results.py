@@ -1,649 +1,400 @@
-'''
+"""Publication result plots for reduced heat-budget datasets."""
 
-'''
-import os
+from __future__ import annotations
 
+from pathlib import Path
 
-import xarray as xr
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import xarray as xr
+from matplotlib import pyplot as plt
+from matplotlib.ticker import AutoMinorLocator
+
+from . import plot_style as style
+
+RESULT_WIDTH = "full"
+RESULT_ASPECT = style.THREE_PANEL_STACK_ASPECT
+HOURLY_RATE_SCALE = 3600
 
 
-SINGLE_COLUMN_WIDTH_IN = 6
-PAPER_FONT_SIZE_PT = 14
-LEGEND_FONT_SIZE_PT = 10
-LINE_WIDTH_PT = 1
-TWO_PANEL_STACK_ASPECT = 0.78
-THREE_PANEL_STACK_ASPECT = 1.2
+def _rolling_mean(da: xr.DataArray, window: int) -> xr.DataArray:
+    return da.rolling(time=window, center=True, min_periods=1).mean()
 
-STACKED_FIGURE_LAYOUTS = {
-    2: {"left": 0.15, "right": 0.96, "bottom": 0.17, "top": 0.88, "hspace": 0.30},
-    3: {"left": 0.18, "right": 0.84, "bottom": 0.13, "top": 0.94, "hspace": 0.15},
-}
 
-plt.rcParams.update(
-    {
-        "font.size": PAPER_FONT_SIZE_PT,
-        "axes.labelsize": PAPER_FONT_SIZE_PT,
-        "axes.titlesize": PAPER_FONT_SIZE_PT,
-        "xtick.labelsize": PAPER_FONT_SIZE_PT,
-        "ytick.labelsize": PAPER_FONT_SIZE_PT,
-        "legend.fontsize": LEGEND_FONT_SIZE_PT,
-        "legend.title_fontsize": LEGEND_FONT_SIZE_PT,
-        "figure.titlesize": PAPER_FONT_SIZE_PT,
-        "lines.linewidth": LINE_WIDTH_PT,
+def _plot_series(
+    ax,
+    da: xr.DataArray,
+    *,
+    label: str,
+    color: str,
+    linestyle: str = "-",
+    drawstyle: str | None = None,
+    alpha: float = 1.0,
+    linewidth: float = style.LINE_WIDTH_PT,
+):
+    (line,) = ax.plot(
+        da["time"].values,
+        da.values,
+        label=label,
+        color=color,
+        linestyle=linestyle,
+        drawstyle=drawstyle,
+        alpha=alpha,
+        linewidth=linewidth,
+        solid_capstyle="round",
+    )
+    return line
+
+
+def _format_twin_axis(ax) -> None:
+    ax.yaxis.set_minor_locator(AutoMinorLocator())
+    ax.grid(False)
+    ax.tick_params(axis="y", which="major", length=4, pad=3)
+    ax.tick_params(axis="y", which="minor", length=2.5)
+    ax.yaxis.get_offset_text().set_fontsize(style.PAPER_FONT_SIZE_PT)
+    ax.spines["top"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["right"].set_linewidth(0.9)
+
+
+def _format_result_axes(axes) -> None:
+    for ax in axes:
+        style.style_axis(ax)
+    style.format_time_axis(axes[-1])
+    for ax in axes[:-1]:
+        ax.set_xlabel("")
+    axes[-1].set_xlabel("Time")
+
+
+def _daily_budget_terms(ds_budget: xr.Dataset) -> dict[str, xr.DataArray]:
+    norm_factor = 1 / ds_budget["domain_volume"]
+    return {
+        "storage": (
+            ds_budget["d_dt_T"] * norm_factor * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
+        "volume_tendency": (
+            ds_budget["T_domain_avg"]
+            * norm_factor
+            * ds_budget["dV_dt"]
+            * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
+        "temperature_tendency": (
+            ds_budget["dT_dt"] * norm_factor * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
+        "advection": (
+            ds_budget["advection_term"] * norm_factor * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
+        "adiabatic": (
+            ds_budget["adiabatic_term"] * norm_factor * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
+        "diabatic": (
+            ds_budget["diabatic_term"] * norm_factor * HOURLY_RATE_SCALE
+        ).resample(time="1D").sum(),
     }
-)
 
 
-def _publication_figsize(aspect: float):
-    return SINGLE_COLUMN_WIDTH_IN, SINGLE_COLUMN_WIDTH_IN * aspect
+def _hourly_budget_terms(
+    ds_budget: xr.Dataset,
+    smoothing_window: int,
+) -> dict[str, xr.DataArray]:
+    norm_factor = 1 / ds_budget["domain_volume"]
+    terms = {
+        "storage": ds_budget["d_dt_T"] * norm_factor * HOURLY_RATE_SCALE,
+        "volume_tendency": (
+            ds_budget["T_domain_avg"]
+            * norm_factor
+            * ds_budget["dV_dt"]
+            * HOURLY_RATE_SCALE
+        ),
+        "temperature_tendency": ds_budget["dT_dt"] * norm_factor * HOURLY_RATE_SCALE,
+        "advection": ds_budget["advection_term"] * norm_factor * HOURLY_RATE_SCALE,
+        "adiabatic": ds_budget["adiabatic_term"] * norm_factor * HOURLY_RATE_SCALE,
+        "diabatic": ds_budget["diabatic_term"] * norm_factor * HOURLY_RATE_SCALE,
+    }
+    return {name: _rolling_mean(da, smoothing_window) for name, da in terms.items()}
 
 
-def _date_locator_formatter():
-    locator = mdates.AutoDateLocator(minticks=3, maxticks=5)
-    formatter = mdates.ConciseDateFormatter(locator)
-    return locator, formatter
+def _add_domain_state_panel(
+    ax,
+    ds_budget: xr.Dataset,
+    *,
+    smoothing_window: int | None = None,
+    daily: bool = False,
+):
+    if daily:
+        domain_volume = ds_budget["domain_volume"].resample(time="1D").mean()
+        t_domain_avg = ds_budget["T_domain_avg"].resample(time="1D").mean()
+        drawstyle = "steps-post"
+    else:
+        assert smoothing_window is not None
+        domain_volume = _rolling_mean(ds_budget["domain_volume"], smoothing_window)
+        t_domain_avg = _rolling_mean(ds_budget["T_domain_avg"], smoothing_window)
+        drawstyle = None
 
-
-def _apply_stacked_figure_layout(fig, nrows: int):
-    fig.subplots_adjust(**STACKED_FIGURE_LAYOUTS[nrows])
-
-
-def _format_time_axis(ax):
-    locator, formatter = _date_locator_formatter()
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
-
-
-def _pad_y_limits(ax, fraction: float = 0.12):
-    lower, upper = ax.get_ylim()
-    span = upper - lower
-    if not np.isfinite(span) or span <= 0:
-        return
-    pad = span * fraction
-    ax.set_ylim(lower - pad, upper + pad)
-
-
-# def plot_budget_terms(ds_budget: xr.Dataset, plot_dir: str) -> None:
-
-#     #rolling average smoothing
-#     ds_budget = ds_budget.rolling(time=5, center=True).mean()
-
-#     fig, ax = plt.subplots(figsize=(10, 12), nrows=3, tight_layout=True, sharex=True)
-
-#     #panel 1: time series of volume, average temperature
-#     #use two y-axis
-#     #lhs y-axis: volume
-#     ds_budget["domain_volume"].plot.line(ax=ax[0], label="Volume")
-#     ax[0].set_ylabel("Domain Volume (m^2 Pa)")
-#     #rhs y-axis: average temperature
-#     ax2 = ax[0].twinx()
-#     ds_budget["T_domain_avg"].plot.line(ax=ax2, label=r"$\langle T \rangle$")
-#     ax2.set_ylabel("Domain Average Temperature (K)")
-
-#     ax[0].set_title("Domain Volume and Average Temperature Time Series")
-#     ax[0].legend(loc='lower left')
-#     ax2.legend(loc="upper right")
-
-#     #panel 2: time series of dT/dt
-#     dT_dt: xr.DataArray = ds_budget["dT_dt"]
-#     dT_dt.plot.line(ax=ax[1], label="dT/dt")
-
-#     ax[1].set_title("dT/dt Time Series")
-
-#     #panel 3: time series of rest of budget terms
-
-#     net_adv: xr.DataArray = ds_budget["advection_term"]  # use actual variable name in ds_budget
-#     adiabatic: xr.DataArray = ds_budget["adiabatic_term"]
-#     diabatic: xr.DataArray = ds_budget["diabatic_term"]
-
-#     net_adv.plot.line(ax=ax[2], label="Net heat advection")
-#     adiabatic.plot.line(ax=ax[2], label="Adiabatic term")
-#     diabatic.plot.line(ax=ax[2], label="Diabatic term")
-
-#     ax[2].set_title("Budget Terms Time Series")
-#     ax[2].legend()
-
-#     out_path = os.path.join(plot_dir, "budget_terms_timeseries.png")
-#     plt.savefig(out_path, bbox_inches="tight")
-#     plt.close(fig)
-
-
-def plot_budget_terms_hourly(ds_budget: xr.Dataset, smoothing_window: int, plot_dir: str) -> None:
-
-    norm_factor            = 1 / ds_budget["domain_volume"]
-    time_conversion_factor = 3600
-
-    # raw hourly data
-    domain_volume = ds_budget["domain_volume"].rolling(time=smoothing_window, center=True).mean().copy()  # smoothing to reduce noise, data is hourly
-    T_domain_avg = ds_budget["T_domain_avg"].rolling(time=smoothing_window, center=True).mean().copy()  # smoothing to reduce noise, data is hourly
-    #ds_budget = ds_budget.rolling(time=smoothing_window, center=True).mean() # smoothing to reduce noise, data is hourly
-    units = "[K/hr]"  # since we are averaging over 24 hours, the units are K/hr
-
-    fig, ax = plt.subplots(
-        figsize=_publication_figsize(THREE_PANEL_STACK_ASPECT),
-        nrows=3,
-        sharex=True
+    line_temperature = _plot_series(
+        ax,
+        t_domain_avg,
+        label=r"$\langle T\rangle$",
+        color=style.COLORS["temperature"],
+        drawstyle=drawstyle,
     )
+    ax.set_ylabel(r"$\langle T\rangle$ [K]")
+    style.use_default_numeric_formatter(ax.yaxis)
+    ax.set_title("Domain state", loc="left", pad=4)
 
-    # ---------------- Panel 1 ----------------
-    # Volume (LHS)
-    line_vol = domain_volume.plot.line(
-        ax=ax[0],
-        add_legend=False,
-        color='C0'
+    ax_v = ax.twinx()
+    line_volume = _plot_series(
+        ax_v,
+        domain_volume,
+        label=r"$V$",
+        color=style.COLORS["volume"],
+        drawstyle=drawstyle,
     )
-    ax[0].set_ylabel("V (m$^2$ Pa)")
+    ax_v.set_ylabel(r"$V$ [m$^2$ Pa]")
+    _format_twin_axis(ax_v)
+    style.pad_y_limits(ax, fraction=0.08)
+    style.pad_y_limits(ax_v, fraction=0.08)
 
-    # Temperature (RHS)
-    ax2 = ax[0].twinx()
-    line_T = T_domain_avg.plot.line(
-        ax=ax2,
-        add_legend=False,
-        color='orange'
-    )
-    ax2.set_ylabel(r"$\langle T \rangle$ (K)")
-
-    _pad_y_limits(ax[0], fraction=0.25)
-    _pad_y_limits(ax2, fraction=0.25)
-
-    # Manual legend control
-    ax[0].legend(
-        [line_vol[0], line_T[0]],
-        ["Volume", r"$\langle T \rangle$"],
-        loc="upper center",
+    style.inside_legend(
+        ax,
+        [line_temperature, line_volume],
+        [r"$\langle T\rangle$", r"$V$"],
         ncol=2,
-        fontsize=LEGEND_FONT_SIZE_PT,
+    )
+    return ax_v
+
+
+def _add_tendency_panel(ax, terms: dict[str, xr.DataArray], *, units: str, daily: bool):
+    drawstyle = "steps-post" if daily else None
+    lines = [
+        _plot_series(
+            ax,
+            terms["storage"],
+            label=r"$d/dt(\int T\,dV)$",
+            color=style.COLORS["storage"],
+            drawstyle=drawstyle,
+        ),
+        _plot_series(
+            ax,
+            terms["volume_tendency"],
+            label=r"$\langle T\rangle/V \cdot dV/dt$",
+            color=style.COLORS["volume_tendency"],
+            drawstyle=drawstyle,
+        ),
+        _plot_series(
+            ax,
+            terms["temperature_tendency"],
+            label=r"$d\langle T\rangle/dt$",
+            color=style.COLORS["temperature_tendency"],
+            drawstyle=drawstyle,
+        ),
+    ]
+    style.zero_line(ax)
+    ax.set_ylabel(units)
+    ax.set_title("Storage decomposition", loc="left", pad=4)
+    style.inside_legend(
+        ax,
+        lines,
+        [line.get_label() for line in lines],
+        ncol=3,
     )
 
-    # ---------------- Panel 2 ---------------
-    term_signs = {
-        "advection_term": 1, # flip sign for advection term
-        "adiabatic_term": 1,  
-        "diabatic_term": 1,
-        # "residual_heat": 1,
+
+def _add_budget_terms_panel(
+    ax,
+    terms: dict[str, xr.DataArray],
+    ds_budget: xr.Dataset,
+    *,
+    units: str,
+    daily: bool,
+    smoothing_window: int | None = None,
+):
+    drawstyle = "steps-post" if daily else None
+    labels = {
+        "advection": "Advection",
+        "adiabatic": "Adiabatic",
+        "diabatic": "Diabatic",
     }
-
-    ddt_TV = ds_budget["d_dt_T"] * norm_factor * time_conversion_factor
-    ddt_TV = ddt_TV.rolling(time=smoothing_window, center=True).mean()
-
-    dT_from_dV = (
-        ds_budget["T_domain_avg"] * norm_factor
-    ) * ds_budget["dV_dt"] * time_conversion_factor
-    dT_from_dV = dT_from_dV.rolling(time=smoothing_window, center=True).mean()
-
-    dTT_dt = ds_budget["dT_dt"] * norm_factor * time_conversion_factor
-    dTT_dt = dTT_dt.rolling(time=smoothing_window, center=True).mean()
-
-    lines_dT = []
-
-    line_ddt_TV = ddt_TV.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C1',
-    )
-    lines_dT.append(line_ddt_TV[0])
-
-    line_dT_from_dV = dT_from_dV.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C0',
-    )
-    lines_dT.append(line_dT_from_dV[0])
-
-    line_dTT_dt = dTT_dt.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C2',
-    )
-    lines_dT.append(line_dTT_dt[0])
-
-    ax[1].legend(lines_dT, [
-        r"d/dt$\int T dV$",
-        r"$\langle T \rangle$/V dV/dt",
-        r"d$\langle T \rangle$/dt"
-    ], loc="upper center", ncol=3, fontsize=LEGEND_FONT_SIZE_PT)
-
-    ax[1].axhline(0, color='k', linestyle='-', linewidth=LINE_WIDTH_PT)
-
-    ax[1].set_ylabel(rf"{units}")
-
-    # ---------------- Panel 3 ----------------
     lines = []
-    
-    color_terms = {'advection_term': 'k', 'adiabatic_term': 'green', 'diabatic_term': 'red'} #, 'residual_heat': 'brown'
-
-    error_var = None
-    if "advection_error" in ds_budget.data_vars:
-        error_var = "advection_error"
-
-
-    for var, label in [
-        ("advection_term", "Net Heat Advection"),
-        ("adiabatic_term", "Adiabatic Term"),
-        ("diabatic_term", "Diabatic Term"),
-        # ("residual_heat", "Mass Closure Residual")
-    ]:
-        term = term_signs[var] * ds_budget[var] * norm_factor * time_conversion_factor
-        term = term.rolling(time=smoothing_window, center=True).mean()
-
-        line = term.plot.line(
-            ax=ax[2],
-            add_legend=False,
-            color=color_terms[var]
+    for name in ("advection", "adiabatic", "diabatic"):
+        line = _plot_series(
+            ax,
+            terms[name],
+            label=labels[name],
+            color=style.COLORS[name],
+            drawstyle=drawstyle,
         )
+        lines.append(line)
 
-
-        if error_var is not None and var in {"advection_term", "diabatic_term"}:
-            error = np.abs(ds_budget[error_var]) * norm_factor  * time_conversion_factor
-            error = error.rolling(time=smoothing_window, center=True).mean() #type:ignore
-            ax[2].fill_between(
-                term["time"].values,
-                (term - error).values,
-                (term + error).values,
-                color=color_terms[var],
-                alpha=0.2,
+        if "advection_error" in ds_budget.data_vars and name in {"advection", "diabatic"}:
+            error = np.abs(ds_budget["advection_error"])
+            error = error * (1 / ds_budget["domain_volume"]) * HOURLY_RATE_SCALE
+            if daily:
+                error = error.resample(time="1D").sum() #type: ignore
+            else:
+                assert smoothing_window is not None
+                error = _rolling_mean(error, smoothing_window) #type: ignore
+            ax.fill_between(
+                terms[name]["time"].values,
+                (terms[name] - error).values,
+                (terms[name] + error).values,
+                color=style.COLORS[name],
+                alpha=0.12,
                 linewidth=0,
+                step="post" if daily else None,
+                zorder=0,
             )
 
-        lines.append(line[0])
+    style.zero_line(ax)
+    ax.set_ylabel(units)
+    ax.set_title("Heat-budget terms", loc="left", pad=4)
+    style.inside_legend(
+        ax,
+        lines,
+        [line.get_label() for line in lines],
+        ncol=3,
+    )
 
-    ax[2].set_ylabel(f" {units}")
-    _pad_y_limits(ax[2], fraction=0.15)
-    ax[2].legend(lines, [
-        "Adv.",
-        "Adiab.",
-        "Diab.",
-    ], loc="upper center", ncol=3, fontsize=LEGEND_FONT_SIZE_PT)
 
-    ax[2].axhline(0, color='k', linestyle='-', linewidth=LINE_WIDTH_PT)
+def _set_shared_symmetric_budget_limits(axes) -> None:
+    ymax = max(
+        abs(axes[1].get_ylim()[0]),
+        abs(axes[1].get_ylim()[1]),
+        abs(axes[2].get_ylim()[0]),
+        abs(axes[2].get_ylim()[1]),
+    )
+    if np.isfinite(ymax) and ymax > 0:
+        axes[1].set_ylim(-1.08 * ymax, 1.08 * ymax)
+        axes[2].set_ylim(-1.08 * ymax, 1.08 * ymax)
 
-    # Remove duplicate x-labels from upper panels
-    ax[0].set_xlabel("")
-    ax[1].set_xlabel("")
-    _format_time_axis(ax[2])
-    ax[2].set_xlabel("Time")
-    _apply_stacked_figure_layout(fig, 3)
 
-    out_path = os.path.join(plot_dir, f"budget_terms_timeseries_hourly_smoothwindow_{smoothing_window}.png")
-    plt.savefig(out_path, dpi=300)
+def plot_budget_terms_hourly(
+    ds_budget: xr.Dataset,
+    smoothing_window: int,
+    plot_dir: str,
+) -> None:
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    terms = _hourly_budget_terms(ds_budget, smoothing_window)
+    units = r"[K hr$^{-1}$]"
+
+    fig, ax = plt.subplots(
+        figsize=style.publication_figsize(RESULT_WIDTH, RESULT_ASPECT),
+        nrows=3,
+        sharex=True,
+    )
+
+    _add_domain_state_panel(ax[0], ds_budget, smoothing_window=smoothing_window)
+    _add_tendency_panel(ax[1], terms, units=units, daily=False)
+    _add_budget_terms_panel(
+        ax[2],
+        terms,
+        ds_budget,
+        units=units,
+        daily=False,
+        smoothing_window=smoothing_window,
+    )
+    _set_shared_symmetric_budget_limits(ax)
+    _format_result_axes(ax)
+    style.apply_stacked_layout(fig, 3, width=RESULT_WIDTH)
+
+    out_path = plot_path / f"budget_terms_timeseries_hourly_smoothwindow_{smoothing_window}.png"
+    style.save_figure(fig, out_path)
     plt.close(fig)
 
 
 def plot_budget_terms_day_bin(ds_budget: xr.Dataset, plot_dir: str) -> None:
-    
-    norm_factor            = 1 / ds_budget["domain_volume"]
-    time_conversion_factor = 3600
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
 
-    #alternative to smooth, sum over the rolling time window instead of averaging, to preserve the total budget over the window
-    domain_volume = ds_budget["domain_volume"].resample(time="1D").mean()  
-    T_domain_avg  = ds_budget["T_domain_avg"].resample(time="1D").mean()  # mean over 24 hours, data is not a rate
-    units = "[K/day]"  # since we are summing over 24 hours, the units  are K/day
-    # not all terms within ds_budget are time-rate-of-change, so I need to apply the unit conversion from s->hr in the individual terms.
+    terms = _daily_budget_terms(ds_budget)
+    units = r"[K day$^{-1}$]"
 
     fig, ax = plt.subplots(
-        figsize=_publication_figsize(THREE_PANEL_STACK_ASPECT),
+        figsize=style.publication_figsize(RESULT_WIDTH, RESULT_ASPECT),
         nrows=3,
-        sharex=True
+        sharex=True,
     )
 
-    # ---------------- Panel 1 ----------------
-    # Volume (LHS)
-    line_vol = domain_volume.plot.line(
-        ax=ax[0],
-        add_legend=False,
-        color='C0',
-        drawstyle="steps-post"
-    )
-    ax[0].set_ylabel("V (m$^2$ Pa)")
+    _add_domain_state_panel(ax[0], ds_budget, daily=True)
+    _add_tendency_panel(ax[1], terms, units=units, daily=True)
+    _add_budget_terms_panel(ax[2], terms, ds_budget, units=units, daily=True)
+    _set_shared_symmetric_budget_limits(ax)
+    _format_result_axes(ax)
+    style.apply_stacked_layout(fig, 3, width=RESULT_WIDTH)
 
-    # Temperature (RHS)
-    ax2 = ax[0].twinx()
-    line_T = T_domain_avg.plot.line(
-        ax=ax2,
-        add_legend=False,
-        color='orange',
-        drawstyle="steps-post"
-    )
-    ax2.set_ylabel(r"$\langle T \rangle$ (K)")
-
-    _pad_y_limits(ax[0], fraction=0.25)
-    _pad_y_limits(ax2, fraction=0.25)
-
-    # Manual legend control
-    ax[0].legend(
-        [line_vol[0], line_T[0]],
-        ["Volume", r"$\langle T \rangle$"],
-        loc="upper center",
-        ncol=2,
-        fontsize=LEGEND_FONT_SIZE_PT,
-    )
-
-    # ---------------- Panel 2 ---------------
-    term_signs = {
-        "advection_term": 1, # flip sign for advection term
-        "adiabatic_term": 1,  
-        "diabatic_term": 1,
-        # "residual_heat": 1,
-    }
-
-    #storage term
-    ddt_TV = ds_budget["d_dt_T"] * norm_factor * time_conversion_factor  # convert to K/hr by dividing by volume and multiplying by T scale (using domain average T as scale)
-    ddt_TV = ddt_TV.resample(time="1D").sum() # sum over 24 hours, data is hourly -> daily
-
-    #change in internal energy from volume change
-    dT_from_dV = (ds_budget["T_domain_avg"] * norm_factor) * ds_budget['dV_dt'] * time_conversion_factor
-    dT_from_dV = dT_from_dV.resample(time="1D").sum() # sum over 24 hours, data is hourly -> daily
-
-    #change in average energy
-    # d<T>/dt
-    dTT_dt = ds_budget["dT_dt"] * norm_factor * time_conversion_factor  # convert to K/hr by dividing by volume and multiplying by T scale (using domain average T as scale)
-    dTT_dt = dTT_dt.resample(time="1D").sum() # sum over 24 hours, data is hourly -> daily
-
-    lines_dT = []
-
-    line_ddt_TV = ddt_TV.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C1',
-        drawstyle="steps-post"
-    )
-    lines_dT.append(line_ddt_TV[0])
-
-    line_dT_from_dV = dT_from_dV.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C0',
-        drawstyle="steps-post"
-    )
-    lines_dT.append(line_dT_from_dV[0])
-
-    line_dTT_dt = dTT_dt.plot.line(
-        ax=ax[1],
-        add_legend=False,
-        color='C2',
-        drawstyle="steps-post"
-    )
-    lines_dT.append(line_dTT_dt[0])
-
-    ax[1].legend(lines_dT, [
-        r"d/dt$\int T dV$",
-        r"$\langle T \rangle$/V dV/dt",
-        r"d$\langle T \rangle$/dt"
-    ], loc="upper center", ncol=3, fontsize=LEGEND_FONT_SIZE_PT)
-
-    ax[1].axhline(0, color='k', linestyle='-', linewidth=LINE_WIDTH_PT)
-
-    ax[1].set_ylabel(rf"{units}")
-
-    # ---------------- Panel 3 ----------------
-    lines = []
-    
-    color_terms = {'advection_term': 'k', 'adiabatic_term': 'green', 'diabatic_term': 'red'} #, 'residual_heat': 'brown'
-
-    error_var = None
-    if "advection_error" in ds_budget.data_vars:
-        error_var = "advection_error"
-
-    for var, label in [
-        ("advection_term", "Net Heat Advection"),
-        ("adiabatic_term", "Adiabatic Term"),
-        ("diabatic_term", "Diabatic Term"),
-        # ("residual_heat", "Mass Closure Residual")
-    ]:
-        term = term_signs[var] * ds_budget[var] * norm_factor * time_conversion_factor
-        term = term.resample(time="1D").sum() # sum over 24 hours, data is hourly -> daily
-        line = term.plot.line(
-            ax=ax[2],
-            add_legend=False,
-            color=color_terms[var],
-            drawstyle="steps-post"
-        )
-
-
-        if error_var is not None and var in {"advection_term", "diabatic_term"}:
-            error = np.abs(ds_budget[error_var]) * norm_factor  * time_conversion_factor
-            error = error.resample(time="1D").sum() # type:ignore 
-            ax[2].fill_between(
-                term["time"].values,
-                (term - error).values,
-                (term + error).values,
-                color=color_terms[var],
-                alpha=0.2,
-                linewidth=0,
-                step="post"
-            )
-
-        lines.append(line[0])
-
-
-    # add faint vertical lines
-    day_boundaries = domain_volume.time.values
-    for a in ax:
-        for t in day_boundaries:
-            a.axvline(
-                t,
-                color="k",
-                linewidth=LINE_WIDTH_PT,
-                alpha=0.2,
-                zorder=0
-            )
-
-
-
-    ax[2].set_ylabel(f" {units}")
-    ax[2].legend(lines, [
-        "Adv.",
-        "Adiab.",
-        "Diab.",
-    ], loc="upper center", ncol=3, fontsize=LEGEND_FONT_SIZE_PT)
-
-    ax[2].axhline(0, color='k', linestyle='-', linewidth=LINE_WIDTH_PT)
-
-    # Remove duplicate x-labels from upper panels
-    ax[0].set_xlabel("")
-    ax[1].set_xlabel("")
-    _format_time_axis(ax[2])
-    ax[2].set_xlabel("Time")
-
-    ymax = max(
-        abs(ax[1].get_ylim()[0]), abs(ax[1].get_ylim()[1]),
-        abs(ax[2].get_ylim()[0]), abs(ax[2].get_ylim()[1]),
-    ) * 1.15
-    ax[1].set_ylim(-ymax, ymax)
-    ax[2].set_ylim(-ymax, ymax)
-
-
-    out_path = os.path.join(plot_dir, "budget_terms_timeseries_daily.png")
-    _apply_stacked_figure_layout(fig, 3)
-    plt.savefig(out_path, dpi=300)
+    style.save_figure(fig, plot_path / "budget_terms_timeseries_daily.png")
     plt.close(fig)
 
 
+def plot_constant_T_results(
+    ds_budget: xr.Dataset,
+    ds_test: xr.Dataset,
+    plot_dir: str,
+) -> None:
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
 
-
-
-# def plot_diabatic_terms_day_bin(ds_budget: xr.Dataset, plot_dir: str) -> None:
-    
-#     norm_factor            = 1 / ds_budget["domain_volume"]
-#     time_conversion_factor = 3600
-
-#     #alternative to smooth, sum over the rolling time window instead of averaging, to preserve the total budget over the window
-#     domain_volume = ds_budget["domain_volume"].resample(time="1D").mean()  
-#     units = "[K/day]"  # since we are summing over 24 hours, the units  are K/day
-#     # not all terms within ds_budget are time-rate-of-change, so I need to apply the unit conversion from s->hr in the individual terms.
-
-#     fig, ax = plt.subplots(
-#         figsize=(10, 8),
-#         nrows=2,
-#         tight_layout=True,
-#         sharex=True
-#     )
-
-#     term_signs = {
-#         "advection_term": 1, # flip sign for advection term
-#         "adiabatic_term": 1,  
-#         "diabatic_term": 1,
-#         "residual_heat": 1,
-#     }
-
-#     color_terms = {'advection_term': 'k', 'adiabatic_term': 'green', 'diabatic_term': 'red', 'residual_heat': 'brown'}
-
-#     error_var = None
-#     if "advection_error" in ds_budget.data_vars:
-#         error_var = "advection_error"
-
-#     daily_terms = {}
-#     for var in term_signs:
-#         term = term_signs[var] * ds_budget[var] * norm_factor * time_conversion_factor
-#         daily_terms[var] = term.resample(time="1D").sum() # sum over 24 hours, data is hourly -> daily
-
-#     # ---------------- Panel 1 ----------------
-#     lines = []
-#     for var, label in [
-#         ("advection_term", "Net Heat Advection"),
-#         ("adiabatic_term", "Adiabatic Term"),
-#         ("diabatic_term", "Diabatic Term"),
-#         ("residual_heat", "Mass Closure Residual")
-#     ]:
-#         term = daily_terms[var]
-#         line = term.plot.line(
-#             ax=ax[0],
-#             add_legend=False,
-#             color=color_terms[var],
-#             drawstyle="steps-post"
-#         )
-
-
-#         if error_var is not None and var in {"advection_term", "diabatic_term"}:
-#             error = np.abs(ds_budget[error_var]) * norm_factor  * time_conversion_factor
-#             error = error.resample(time="1D").sum() # type:ignore 
-#             ax[0].fill_between(
-#                 term["time"].values,
-#                 (term - error).values,
-#                 (term + error).values,
-#                 color=color_terms[var],
-#                 alpha=0.2,
-#                 linewidth=0,
-#                 step="post"
-#             )
-
-#         lines.append(line[0])
-
-#     ax[0].set_ylabel(f" {units}")
-#     ax[0].set_title("Budget Terms (normalized by volume)")
-#     ax[0].legend(lines, [
-#         "Net Heat Advection",
-#         "Adiabatic Term",
-#         "Diabatic Term",
-#         "Mass Residual"
-#     ], fontsize=10)
-#     ax[0].axhline(0, color='k', linestyle='-', linewidth=1)
-
-#     # ---------------- Panel 2 ----------------
-#     residual_raw = daily_terms["diabatic_term"] + daily_terms["residual_heat"]
-#     residual_raw.name = "raw_residual"
-
-#     lines_residual = []
-#     line_diabatic = daily_terms["diabatic_term"].plot.line(
-#         ax=ax[1],
-#         add_legend=False,
-#         color=color_terms["diabatic_term"],
-#         drawstyle="steps-post"
-#     )
-#     lines_residual.append(line_diabatic[0])
-
-#     line_mass_residual = daily_terms["residual_heat"].plot.line(
-#         ax=ax[1],
-#         add_legend=False,
-#         color=color_terms["residual_heat"],
-#         drawstyle="steps-post"
-#     )
-#     lines_residual.append(line_mass_residual[0])
-
-#     line_raw_residual = residual_raw.plot.line(
-#         ax=ax[1],
-#         add_legend=False,
-#         color='C4',
-#         linestyle='--',
-#         drawstyle="steps-post"
-#     )
-#     lines_residual.append(line_raw_residual[0])
-
-#     ax[1].set_ylabel(f" {units}")
-#     ax[1].set_title("Diabatic Residual Partition")
-#     ax[1].legend(lines_residual, [
-#         "Diabatic Term",
-#         "Mass Residual",
-#         "Raw Eulerian Heat Budget Residual"
-#     ], fontsize=10)
-#     ax[1].axhline(0, color='k', linestyle='-', linewidth=1)
-
-#     # add faint vertical lines
-#     day_boundaries = domain_volume.time.values
-#     for a in ax:
-#         for t in day_boundaries:
-#             a.axvline(
-#                 t,
-#                 color="k",
-#                 linewidth=0.3,
-#                 alpha=0.2,
-#                 zorder=0
-#             )
-
-#     # Remove duplicate x-labels from upper panels
-#     ax[0].set_xlabel("")
-
-#     ymax = max(
-#         abs(ax[0].get_ylim()[0]), abs(ax[0].get_ylim()[1]),
-#         abs(ax[1].get_ylim()[0]), abs(ax[1].get_ylim()[1]),
-#     )
-#     ax[0].set_ylim(-ymax, ymax)
-#     ax[1].set_ylim(-ymax, ymax)
-
-
-#     out_path = os.path.join(plot_dir, "diabatic_residual_terms_daily.png")
-#     plt.savefig(out_path, bbox_inches="tight")
-#     plt.close(fig)
-
-
-
-
-
-def plot_constant_T_results(ds_budget: xr.Dataset, ds_test:xr.Dataset, plot_dir: str) -> None:
-    # comparison plot between original budget "uncertainty in advection" and test budget net heat advection
-
-    norm_factor            = 1 / ds_budget["domain_volume"]
-    time_conversion_factor = 3600
+    norm_factor = 1 / ds_budget["domain_volume"]
+    time_rate_conversion = HOURLY_RATE_SCALE
 
     fig, ax = plt.subplots(
-        figsize=_publication_figsize(TWO_PANEL_STACK_ASPECT),
+        figsize=style.publication_figsize("full", style.TWO_PANEL_STACK_ASPECT),
         nrows=2,
         sharex=True,
     )
 
-    ax[0].plot(ds_budget["time"], ds_budget["advection_error"] * norm_factor * time_conversion_factor, label=r"$\delta M T_{scale}$", color='red')
-    ax[0].plot(ds_test["time"], ds_test["advection_term"] * norm_factor * time_conversion_factor, label=r"$\mathcal{F}_{advection}$", color='k')
+    line_error = _plot_series(
+        ax[0],
+        ds_budget["advection_error"] * norm_factor * time_rate_conversion,
+        label=r"$\delta M T_{scale}$",
+        color=style.COLORS["diabatic"],
+    )
+    line_test = _plot_series(
+        ax[0],
+        ds_test["advection_term"] * norm_factor * time_rate_conversion,
+        label=r"$\mathcal{F}_{advection}$",
+        color=style.COLORS["advection"],
+    )
+    style.inside_legend(
+        ax[0],
+        [line_error, line_test],
+        [line_error.get_label(), line_test.get_label()],
+        ncol=2,
+    )
 
-    ax[0].legend(fontsize=LEGEND_FONT_SIZE_PT)
+    dt = (ds_budget["time"][1] - ds_budget["time"][0]).values / np.timedelta64(1, "s")
+    integrated_advection_error = (
+        ds_budget["advection_error"] * norm_factor * dt
+    ).cumsum(dim="time")
+    integrated_net_heat_advection = (
+        ds_test["advection_term"] * norm_factor * dt
+    ).cumsum(dim="time")
 
-    #integrated quantities
-    dt = (ds_budget["time"][1] - ds_budget["time"][0]).values / np.timedelta64(1, 's')  # time step in seconds
-    integrated_advection_error = (ds_budget["advection_error"] * norm_factor * dt).cumsum(dim="time")
-    integrated_net_heat_advection = (ds_test["advection_term"] * norm_factor * dt).cumsum(dim="time")
+    line_integrated_error = _plot_series(
+        ax[1],
+        integrated_advection_error,
+        label=r"$T_{scale}\int \delta M\,dt$",
+        color=style.COLORS["diabatic"],
+    )
+    line_integrated_test = _plot_series(
+        ax[1],
+        integrated_net_heat_advection,
+        label=r"$\int \mathcal{F}_{advection}\,dt$",
+        color=style.COLORS["advection"],
+    )
+    style.inside_legend(
+        ax[1],
+        [line_integrated_error, line_integrated_test],
+        [line_integrated_error.get_label(), line_integrated_test.get_label()],
+        ncol=2,
+    )
 
-    ax[1].plot(ds_budget["time"], integrated_advection_error, label=r"$T_{scale} \int \delta M dt$", color='red')
-    ax[1].plot(ds_test["time"], integrated_net_heat_advection, label=r"$\int \mathcal{F}_{advection} dt$", color='k')
-
-    ax[1].legend(fontsize=LEGEND_FONT_SIZE_PT)
-
-    ax[1].set_xlabel("Time")
-    ax[0].set_ylabel("Advection (K/hr)")
-    ax[1].set_ylabel("Integrated Advection (K)")
-    fig.suptitle("Constant-T advection comparison")
-    _format_time_axis(ax[1])
-    _apply_stacked_figure_layout(fig, 2)
-    plt.savefig(os.path.join(plot_dir, "constant_T_advection_comparison.png"), dpi=300)
+    ax[0].set_title("Advection rate", loc="left", pad=4)
+    ax[1].set_title("Integrated advection", loc="left", pad=4)
+    ax[0].set_ylabel(r"[K hr$^{-1}$]")
+    ax[1].set_ylabel("[K]")
+    _format_result_axes(ax)
+    style.apply_stacked_layout(fig, 2, width="full")
+    style.save_figure(fig, plot_path / "constant_T_advection_comparison.png")
     plt.close(fig)
