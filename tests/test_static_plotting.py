@@ -132,7 +132,7 @@ def test_benchmark_diagnostics_requires_diagnostic_plots(monkeypatch, tmp_path):
         cli.plot_dataset(request)
 
 
-def test_benchmark_mode_dispatches_figure5_and_figure6(monkeypatch, tmp_path):
+def test_benchmark_mode_dispatches_all_benchmark_figures(monkeypatch, tmp_path):
     request = cli.PlotRequest(
         dataset="case_full_atmosphere",
         data_root=tmp_path / "campaign-data",
@@ -168,11 +168,21 @@ def test_benchmark_mode_dispatches_figure5_and_figure6(monkeypatch, tmp_path):
         "plot_figure6_diagnostics",
         lambda *args, **kwargs: calls.append("figure6"),
     )
+    monkeypatch.setattr(
+        cli.plot_diagnostics,
+        "plot_figure7_diagnostics",
+        lambda *args, **kwargs: calls.append("figure7"),
+    )
+    monkeypatch.setattr(
+        cli.plot_diagnostics,
+        "plot_figure8_diagnostics",
+        lambda *args, **kwargs: calls.append("figure8"),
+    )
 
     paths = cli.plot_dataset(request)
 
     assert paths.data_dir == request.data_root / request.dataset
-    assert calls == ["core", "figure5", "figure6"]
+    assert calls == ["core", "figure5", "figure6", "figure7", "figure8"]
 
 
 def test_figure5_bundle_requires_per_face_benchmark_fields(tmp_path):
@@ -274,3 +284,61 @@ def test_figure6_bundle_writes_heating_and_mass_closure_panels(tmp_path):
     )
     for filename in expected:
         assert (tmp_path / "diagnostics" / filename).is_file()
+
+
+def test_figure7_bundle_writes_timeseries_and_correlation(tmp_path):
+    times = np.array(
+        [
+            "1941-05-01T00:00:00",
+            "1941-05-02T00:00:00",
+            "1941-05-03T00:00:00",
+        ],
+        dtype="datetime64[ns]",
+    )
+    ds = xr.Dataset(
+        {
+            "benchmark_heat_flux_divergence": ("time", [-2.0, 0.5, 3.0]),
+            "benchmark_heat_flux_divergence_from_walls": (
+                "time",
+                [-1.8, 0.4, 3.1],
+            ),
+        },
+        coords={"time": times},
+    )
+
+    plot_diagnostics.plot_figure7_diagnostics(ds, tmp_path)
+
+    assert (tmp_path / "fig7_vithed_vs_wall_flux_divergence.png").is_file()
+    assert (
+        tmp_path / "fig7.1_vithed_vs_wall_flux_divergence_correlation.png"
+    ).is_file()
+
+
+def test_figure8_bundle_writes_storage_timeseries_and_correlations(tmp_path):
+    times = np.array(
+        [
+            "1941-05-01T00:00:00",
+            "1941-05-02T00:00:00",
+            "1941-05-03T00:00:00",
+        ],
+        dtype="datetime64[ns]",
+    )
+    base = np.array([-2.0, 0.5, 3.0])
+    ds = xr.Dataset(
+        {
+            name: ("time", base * (index + 1))
+            for index, name in enumerate(plot_diagnostics.FIG8_VARIABLES)
+        },
+        coords={"time": times},
+    )
+
+    plot_diagnostics.plot_figure8_diagnostics(ds, tmp_path)
+
+    expected = (
+        "fig8_benchmark_storage_comparison.png",
+        "fig8.1_benchmark_vs_calculated_total_storage.png",
+        "fig8.2_benchmark_vs_calculated_mean_temperature_storage.png",
+        "fig8.3_benchmark_vs_calculated_volume_change_storage.png",
+    )
+    for filename in expected:
+        assert (tmp_path / filename).is_file()

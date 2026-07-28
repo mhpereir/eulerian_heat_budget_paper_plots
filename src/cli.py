@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("auto", "on", "off"),
         default="off",
         help=(
-            "Whether to create Figure 5 benchmark diagnostics. "
+            "Whether to create Figures 5 through 8 benchmark diagnostics. "
             "auto enables them for dataset names ending in "
             f"{config.FULL_ATMOSPHERE_SUFFIX!r}. Default: off."
         ),
@@ -165,6 +165,14 @@ def plot_dataset(request: PlotRequest) -> DatasetPaths:
                     plot_dir=str(paths.diagnostics_dir),
                 )
                 plot_diagnostics.plot_figure6_diagnostics(
+                    ds,
+                    plot_dir=str(paths.diagnostics_dir),
+                )
+                plot_diagnostics.plot_figure7_diagnostics(
+                    ds,
+                    plot_dir=str(paths.diagnostics_dir),
+                )
+                plot_diagnostics.plot_figure8_diagnostics(
                     ds,
                     plot_dir=str(paths.diagnostics_dir),
                 )

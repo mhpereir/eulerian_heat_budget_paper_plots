@@ -86,6 +86,35 @@ FIG6_TERM_SPECS = (
         "#7B3294",
     ),
 )
+FIG7_VARIABLES = (
+    "benchmark_heat_flux_divergence",
+    "benchmark_heat_flux_divergence_from_walls",
+)
+FIG8_TERM_SPECS = (
+    (
+        "benchmark_storage_term",
+        "d_dt_T",
+        r"Total storage ($d\int T\,dV/dt$)",
+        style.COLORS["storage"],
+    ),
+    (
+        "benchmark_mean_temperature_storage_term",
+        "dT_dt",
+        r"Mean-temperature storage ($V\,d\langle T\rangle/dt$)",
+        "#1B9E77",
+    ),
+    (
+        "benchmark_volume_change_storage_term",
+        "volume_change_storage_term",
+        r"Volume-change storage ($\langle T\rangle\,dV/dt$)",
+        style.COLORS["residual"],
+    ),
+)
+FIG8_VARIABLES = tuple(
+    name
+    for benchmark_name, calculated_name, _title, _color in FIG8_TERM_SPECS
+    for name in (benchmark_name, calculated_name)
+)
 CORE_DIAGNOSTIC_VARIABLES = (
     "dV_dt",
     "domain_volume",
@@ -1032,6 +1061,8 @@ def _plot_heat_flux_correlation(
     path: Path,
     *,
     point_color: str,
+    benchmark_label: str = "Benchmark",
+    calculated_label: str = "Calculated",
 ) -> None:
     benchmark_aligned, calculated_aligned = xr.align(
         benchmark,
@@ -1075,8 +1106,8 @@ def _plot_heat_flux_correlation(
     ax.set_xlim(lower, upper)
     ax.set_ylim(lower, upper)
     _set_square_1_to_1_axis(ax)
-    _set_square_xlabel(ax, f"Benchmark [{HEAT_FLUX_UNITS}]")
-    ax.set_ylabel(f"Calculated [{HEAT_FLUX_UNITS}]")
+    _set_square_xlabel(ax, f"{benchmark_label} [{HEAT_FLUX_UNITS}]")
+    ax.set_ylabel(f"{calculated_label} [{HEAT_FLUX_UNITS}]")
     ax.set_title(title, pad=4)
     _add_correlation_text(ax, correlation_label)
     ax.legend(loc="lower right", **style.legend_kwargs())
@@ -1267,3 +1298,145 @@ def plot_figure6_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> Non
     )
     fig6_benchmark_heating_comparison(ds_budget, plot_dir)
     fig6_heating_correlations(ds_budget, plot_dir)
+
+
+def plot_figure7_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
+    """Compare ERA5 wall-integrated heat transport with archived vithed."""
+    _require_dataset_variables(ds_budget, FIG7_VARIABLES, "Figure 7")
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    vithed, walls = xr.align(
+        ds_budget["benchmark_heat_flux_divergence"],
+        ds_budget["benchmark_heat_flux_divergence_from_walls"],
+        join="inner",
+    )
+    color = style.COLORS["advection"]
+    fig, ax = plt.subplots(
+        figsize=_publication_figsize("single", SINGLE_PANEL_ASPECT),
+    )
+    ax.plot(
+        vithed["time"],
+        vithed,
+        linestyle="--",
+        color=color,
+        linewidth=LINE_WIDTH_PT,
+        alpha=0.75,
+        label="ERA5 vithed",
+    )
+    ax.plot(
+        walls["time"],
+        walls,
+        linestyle="-",
+        color=color,
+        linewidth=LINE_WIDTH_PT,
+        label="ERA5 wall-flux sum",
+    )
+    style.style_axis(ax)
+    style.zero_line(ax)
+    style.pad_y_limits(ax, fraction=0.08)
+    style.format_time_axis(ax)
+    ax.set_xlabel("Time")
+    ax.set_ylabel(rf"[{HEAT_FLUX_UNITS}]")
+    ax.set_title("Horizontal thermal-energy flux divergence", loc="left", pad=4)
+    style.inside_legend(
+        ax,
+        ax.lines[:2],
+        [line.get_label() for line in ax.lines[:2]],
+        ncol=2,
+    )
+    style.save_figure(
+        fig,
+        plot_path / "fig7_vithed_vs_wall_flux_divergence.png",
+    )
+    plt.close(fig)
+
+    _plot_heat_flux_correlation(
+        vithed,
+        walls,
+        "Horizontal thermal-energy flux divergence",
+        plot_path / "fig7.1_vithed_vs_wall_flux_divergence_correlation.png",
+        point_color=color,
+        benchmark_label="ERA5 vithed",
+        calculated_label="ERA5 wall-flux sum",
+    )
+
+
+def plot_figure8_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
+    """Compare total thermal storage and its volume-average decomposition."""
+    _require_dataset_variables(ds_budget, FIG8_VARIABLES, "Figure 8")
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(
+        figsize=_publication_figsize("single", THREE_PANEL_STACK_ASPECT),
+        nrows=3,
+        sharex=True,
+    )
+    for axis, (benchmark_name, calculated_name, title, color) in zip(
+        axes,
+        FIG8_TERM_SPECS,
+    ):
+        benchmark, calculated = xr.align(
+            ds_budget[benchmark_name],
+            ds_budget[calculated_name],
+            join="inner",
+        )
+        axis.plot(
+            benchmark["time"],
+            benchmark,
+            linestyle="--",
+            color=color,
+            linewidth=LINE_WIDTH_PT,
+            alpha=0.75,
+            label="ERA5 vithe",
+        )
+        axis.plot(
+            calculated["time"],
+            calculated,
+            linestyle="-",
+            color=color,
+            linewidth=LINE_WIDTH_PT,
+            label="Pressure-level calculation",
+        )
+        style.style_axis(axis)
+        style.zero_line(axis)
+        style.pad_y_limits(axis, fraction=0.08)
+        axis.set_ylabel(rf"[{HEAT_FLUX_UNITS}]")
+        axis.set_title(title, loc="left", pad=4)
+        style.inside_legend(
+            axis,
+            axis.lines[:2],
+            [line.get_label() for line in axis.lines[:2]],
+            ncol=2,
+        )
+
+    style.format_time_axis(axes[-1])
+    axes[-1].set_xlabel("Time")
+    for axis in axes[:-1]:
+        axis.set_xlabel("")
+    _apply_stacked_figure_layout(fig, 3)
+    style.save_figure(
+        fig,
+        plot_path / "fig8_benchmark_storage_comparison.png",
+    )
+    plt.close(fig)
+
+    filenames = (
+        "fig8.1_benchmark_vs_calculated_total_storage.png",
+        "fig8.2_benchmark_vs_calculated_mean_temperature_storage.png",
+        "fig8.3_benchmark_vs_calculated_volume_change_storage.png",
+    )
+    for (
+        benchmark_name,
+        calculated_name,
+        title,
+        color,
+    ), filename in zip(FIG8_TERM_SPECS, filenames):
+        _plot_heat_flux_correlation(
+            ds_budget[benchmark_name],
+            ds_budget[calculated_name],
+            title,
+            plot_path / filename,
+            point_color=color,
+        )
