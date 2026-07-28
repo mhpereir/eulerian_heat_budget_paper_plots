@@ -89,6 +89,8 @@ FIG6_TERM_SPECS = (
 FIG7_VARIABLES = (
     "benchmark_heat_flux_divergence",
     "benchmark_heat_flux_divergence_from_walls",
+    "benchmark_mass_flux_divergence",
+    "benchmark_mass_flux_divergence_from_walls",
 )
 FIG8_TERM_SPECS = (
     (
@@ -1063,6 +1065,7 @@ def _plot_heat_flux_correlation(
     point_color: str,
     benchmark_label: str = "Benchmark",
     calculated_label: str = "Calculated",
+    units: str = HEAT_FLUX_UNITS,
 ) -> None:
     benchmark_aligned, calculated_aligned = xr.align(
         benchmark,
@@ -1106,8 +1109,8 @@ def _plot_heat_flux_correlation(
     ax.set_xlim(lower, upper)
     ax.set_ylim(lower, upper)
     _set_square_1_to_1_axis(ax)
-    _set_square_xlabel(ax, f"{benchmark_label} [{HEAT_FLUX_UNITS}]")
-    ax.set_ylabel(f"{calculated_label} [{HEAT_FLUX_UNITS}]")
+    _set_square_xlabel(ax, f"{benchmark_label} [{units}]")
+    ax.set_ylabel(f"{calculated_label} [{units}]")
     ax.set_title(title, pad=4)
     _add_correlation_text(ax, correlation_label)
     ax.legend(loc="lower right", **style.legend_kwargs())
@@ -1301,7 +1304,7 @@ def plot_figure6_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> Non
 
 
 def plot_figure7_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
-    """Compare ERA5 wall-integrated heat transport with archived vithed."""
+    """Compare ERA5 wall-integrated mass and heat fluxes with divergences."""
     _require_dataset_variables(ds_budget, FIG7_VARIABLES, "Figure 7")
     plot_path = Path(plot_dir)
     plot_path.mkdir(parents=True, exist_ok=True)
@@ -1359,6 +1362,17 @@ def plot_figure7_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> Non
         point_color=color,
         benchmark_label="ERA5 vithed",
         calculated_label="ERA5 wall-flux sum",
+    )
+
+    _plot_heat_flux_correlation(
+        ds_budget["benchmark_mass_flux_divergence"],
+        ds_budget["benchmark_mass_flux_divergence_from_walls"],
+        "Horizontal mass-flux divergence",
+        plot_path / "fig7.2_vimad_vs_wall_mass_flux_divergence_correlation.png",
+        point_color=style.COLORS["mass"],
+        benchmark_label="ERA5 vimad",
+        calculated_label="ERA5 wall-flux sum",
+        units=r"m$^2$ Pa s$^{-1}$",
     )
 
 

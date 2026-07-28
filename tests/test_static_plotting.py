@@ -302,6 +302,11 @@ def test_figure7_bundle_writes_timeseries_and_correlation(tmp_path):
                 "time",
                 [-1.8, 0.4, 3.1],
             ),
+            "benchmark_mass_flux_divergence": ("time", [-4.0, 1.0, 6.0]),
+            "benchmark_mass_flux_divergence_from_walls": (
+                "time",
+                [-3.8, 0.8, 6.2],
+            ),
         },
         coords={"time": times},
     )
@@ -311,6 +316,9 @@ def test_figure7_bundle_writes_timeseries_and_correlation(tmp_path):
     assert (tmp_path / "fig7_vithed_vs_wall_flux_divergence.png").is_file()
     assert (
         tmp_path / "fig7.1_vithed_vs_wall_flux_divergence_correlation.png"
+    ).is_file()
+    assert (
+        tmp_path / "fig7.2_vimad_vs_wall_mass_flux_divergence_correlation.png"
     ).is_file()
 
 
