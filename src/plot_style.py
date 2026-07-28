@@ -30,15 +30,35 @@ TWO_PANEL_STACK_ASPECT = 0.55
 THREE_PANEL_STACK_ASPECT = 0.62
 SQUARE_PANEL_ASPECT = 0.95
 
-COLORS = {
+VARIABLE_COLORS = {
+    "T_mean": "#E60000",
     "volume": "#0072B2",
-    "temperature": "#E69F00",
+    "dTdt": "#D55E00",
+    "advection": "#2636CA",
+    "adiabatic": "#0DAF43",
+    "diabatic": "#D55E00",
+    "lwa_a_region": "#EC6205",
+    "lwa_c_region": "#00869E",
+    "pbl_p_mean": "#0072B2",
+    "pbl_p_p05": "#0072B2",
+    "pbl_p_p95": "#0072B2",
+    "nslr_heating_rate_approx": "#F53232",
+    "nssr_heating_rate_approx": "#F8B627",
+    "sshf_heating_rate_approx": "#AA0B0B",
+    "slhf_heating_rate_approx": "#56B4E9",
+    "soil_moisture": "#6B3400",
+    "cloud_cover": "#56B4E9",
+}
+
+COLORS = {
+    "volume": VARIABLE_COLORS['volume'],
+    "temperature": VARIABLE_COLORS['T_mean'],
     "storage": "#D55E00",
     "volume_tendency": "#0072B2",
     "temperature_tendency": "#009E73",
-    "advection": "#111111",
-    "adiabatic": "#009E73",
-    "diabatic": "#D55E00",
+    "advection": VARIABLE_COLORS['advection'],
+    "adiabatic": VARIABLE_COLORS['adiabatic'],
+    "diabatic": VARIABLE_COLORS['diabatic'],
     "residual": "#111111",
     "mass": "#0072B2",
     "benchmark": "#4D4D4D",
@@ -56,6 +76,7 @@ FACE_COLORS = {
     "top": "#E69F00",
     "bottom": "#D55E00",
 }
+
 
 STACKED_FIGURE_LAYOUTS = {
     ("single", 2): {
@@ -293,7 +314,7 @@ def inside_legend(
     handles,
     labels,
     *,
-    loc: str = "upper center",
+    loc: str = "upper right",
     ncol: int | None = None,
     **overrides,
 ) -> None:

@@ -166,20 +166,20 @@ def _add_domain_state_panel(
 def _add_tendency_panel(ax, terms: dict[str, xr.DataArray], *, units: str, daily: bool):
     drawstyle = "steps-post" if daily else None
     lines = [
-        _plot_series(
-            ax,
-            terms["storage"],
-            label=r"$d/dt(\int T\,dV)$",
-            color=style.COLORS["storage"],
-            drawstyle=drawstyle,
-        ),
-        _plot_series(
-            ax,
-            terms["volume_tendency"],
-            label=r"$\langle T\rangle/V \cdot dV/dt$",
-            color=style.COLORS["volume_tendency"],
-            drawstyle=drawstyle,
-        ),
+        # _plot_series(
+        #     ax,
+        #     terms["storage"],
+        #     label=r"$d/dt(\int T\,dV)$",
+        #     color=style.COLORS["storage"],
+        #     drawstyle=drawstyle,
+        # ),
+        # _plot_series(
+        #     ax,
+        #     terms["volume_tendency"],
+        #     label=r"$\langle T\rangle/V \cdot dV/dt$",
+        #     color=style.COLORS["volume_tendency"],
+        #     drawstyle=drawstyle,
+        # ),
         _plot_series(
             ax,
             terms["temperature_tendency"],
