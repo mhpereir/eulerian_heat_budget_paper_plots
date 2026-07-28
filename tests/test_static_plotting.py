@@ -103,6 +103,12 @@ def test_cli_defaults_enable_core_diagnostics_not_benchmark_diagnostics():
     assert args.benchmark_diagnostics == "off"
 
 
+def test_cli_accepts_external_data_root(tmp_path):
+    args = cli.build_parser().parse_args(["--data-root", str(tmp_path)])
+
+    assert args.data_root == tmp_path
+
+
 def test_benchmark_diagnostics_requires_diagnostic_plots(monkeypatch, tmp_path):
     request = cli.PlotRequest(
         dataset="case_full_atmosphere",
@@ -124,6 +130,49 @@ def test_benchmark_diagnostics_requires_diagnostic_plots(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "plot_result_figures", lambda *args, **kwargs: None)
     with pytest.raises(ValueError, match="requires diagnostic plots"):
         cli.plot_dataset(request)
+
+
+def test_benchmark_mode_dispatches_figure5_and_figure6(monkeypatch, tmp_path):
+    request = cli.PlotRequest(
+        dataset="case_full_atmosphere",
+        data_root=tmp_path / "campaign-data",
+        diagnostic_plots=True,
+        benchmark_diagnostics="on",
+        plots_root=tmp_path / "plots",
+    )
+    ds = xr.Dataset(
+        {"domain_volume": ("time", np.ones(2))},
+        coords={
+            "time": np.array(
+                ["1941-05-01T00:00:00", "1941-05-02T00:00:00"],
+                dtype="datetime64[ns]",
+            )
+        },
+    )
+    calls = []
+
+    monkeypatch.setattr(cli.io, "load_heat_budget", lambda *args, **kwargs: ds)
+    monkeypatch.setattr(cli, "plot_result_figures", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        cli.plot_diagnostics,
+        "plot_core_diagnostics",
+        lambda *args, **kwargs: calls.append("core"),
+    )
+    monkeypatch.setattr(
+        cli.plot_diagnostics,
+        "plot_figure5_diagnostics",
+        lambda *args, **kwargs: calls.append("figure5"),
+    )
+    monkeypatch.setattr(
+        cli.plot_diagnostics,
+        "plot_figure6_diagnostics",
+        lambda *args, **kwargs: calls.append("figure6"),
+    )
+
+    paths = cli.plot_dataset(request)
+
+    assert paths.data_dir == request.data_root / request.dataset
+    assert calls == ["core", "figure5", "figure6"]
 
 
 def test_figure5_bundle_requires_per_face_benchmark_fields(tmp_path):
@@ -180,3 +229,48 @@ def test_benchmark_diagnostics_writes_fig1_benchmark_panels(tmp_path):
     assert (
         tmp_path / "diagnostics" / "fig1.2_benchmark_vs_calculated_dV_dt.png"
     ).is_file()
+
+
+def test_figure6_bundle_requires_mass_closure_heating(tmp_path):
+    times = np.array(
+        ["1941-05-01T00:00:00", "1941-05-02T00:00:00"],
+        dtype="datetime64[ns]",
+    )
+    data_vars = {
+        name: ("time", np.ones(times.size))
+        for name in plot_diagnostics.FIG6_VARIABLES
+        if name != "benchmark_residual_heat"
+    }
+    ds = xr.Dataset(data_vars, coords={"time": times})
+
+    with pytest.raises(ValueError, match="benchmark_residual_heat"):
+        plot_diagnostics.plot_figure6_diagnostics(ds, tmp_path)
+
+
+def test_figure6_bundle_writes_heating_and_mass_closure_panels(tmp_path):
+    times = np.array(
+        [
+            "1941-05-01T00:00:00",
+            "1941-05-02T00:00:00",
+            "1941-05-03T00:00:00",
+        ],
+        dtype="datetime64[ns]",
+    )
+    base = np.array([-2.0, 0.5, 3.0])
+    data_vars = {
+        name: ("time", base * (index + 1))
+        for index, name in enumerate(plot_diagnostics.FIG6_VARIABLES)
+    }
+    ds = xr.Dataset(data_vars, coords={"time": times})
+
+    plot_diagnostics.plot_figure6_diagnostics(ds, tmp_path / "diagnostics")
+
+    expected = (
+        "fig6_benchmark_heating_comparison.png",
+        "fig6.1_benchmark_vs_calculated_adiabatic.png",
+        "fig6.2_benchmark_vs_calculated_diabatic_workflow.png",
+        "fig6.3_benchmark_vs_calculated_diabatic_physical.png",
+        "fig6.4_benchmark_vs_calculated_residual_heat.png",
+    )
+    for filename in expected:
+        assert (tmp_path / "diagnostics" / filename).is_file()

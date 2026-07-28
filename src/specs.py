@@ -14,6 +14,7 @@ BenchmarkDiagnostics = Literal["auto", "on", "off"]
 @dataclass(frozen=True)
 class PlotRequest:
     dataset: str = config.DEFAULT_DATASET
+    data_root: Path | str = config.DATA_ROOT
     time_start: str | None = None
     time_end: str | None = None
     diagnostic_plots: bool = True
@@ -21,6 +22,7 @@ class PlotRequest:
     plots_root: Path | str = config.PLOTS_ROOT
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "data_root", Path(self.data_root))
         object.__setattr__(self, "plots_root", Path(self.plots_root))
 
 

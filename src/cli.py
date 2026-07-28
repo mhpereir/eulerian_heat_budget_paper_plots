@@ -30,7 +30,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dataset",
         default=config.DEFAULT_DATASET,
-        help=f"Dataset folder under data/. Default: {config.DEFAULT_DATASET}",
+        help=(
+            "Dataset folder under --data-root. "
+            f"Default: {config.DEFAULT_DATASET}"
+        ),
+    )
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=config.DATA_ROOT,
+        help=f"Root containing dataset folders. Default: {config.DATA_ROOT}",
     )
     parser.add_argument(
         "--start",
@@ -120,11 +129,16 @@ def plot_result_figures(ds: xr.Dataset, results_dir: Path) -> None:
 
 
 def plot_dataset(request: PlotRequest) -> DatasetPaths:
-    paths = io.dataset_paths(request.dataset, plots_root=request.plots_root)
+    paths = io.dataset_paths(
+        request.dataset,
+        data_root=request.data_root,
+        plots_root=request.plots_root,
+    )
     ds = io.load_heat_budget(
         request.dataset,
         start=request.time_start,
         end=request.time_end,
+        data_root=request.data_root,
     )
     try:
         plot_result_figures(ds, paths.results_dir)
@@ -150,6 +164,10 @@ def plot_dataset(request: PlotRequest) -> DatasetPaths:
                     ds,
                     plot_dir=str(paths.diagnostics_dir),
                 )
+                plot_diagnostics.plot_figure6_diagnostics(
+                    ds,
+                    plot_dir=str(paths.diagnostics_dir),
+                )
     finally:
         ds.close()
 
@@ -161,12 +179,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list_datasets:
-        for dataset in io.available_datasets():
+        for dataset in io.available_datasets(args.data_root):
             print(dataset)
         return 0
 
     request = PlotRequest(
         dataset=args.dataset,
+        data_root=args.data_root,
         time_start=args.time_start,
         time_end=args.time_end,
         diagnostic_plots=args.diagnostic_plots,

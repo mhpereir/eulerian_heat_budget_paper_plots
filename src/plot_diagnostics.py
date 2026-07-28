@@ -56,6 +56,36 @@ BENCHMARK_MASS_CONTINUITY_VARIABLES = (
     "net_mass_advection",
     "benchmark_mass_flux_net",
 )
+FIG6_VARIABLES = (
+    "adiabatic_term",
+    "diabatic_term",
+    "calculated_diabatic_term_physical",
+    "residual_heat",
+    "benchmark_adiabatic_term",
+    "benchmark_diabatic_term",
+    "benchmark_diabatic_term_physical",
+    "benchmark_residual_heat",
+)
+FIG6_TERM_SPECS = (
+    (
+        "benchmark_adiabatic_term",
+        "adiabatic_term",
+        r"Adiabatic pressure work ($\mathcal{C}$)",
+        style.COLORS["adiabatic"],
+    ),
+    (
+        "benchmark_diabatic_term",
+        "diabatic_term",
+        r"Workflow diabatic residual ($\mathcal{D}_0$)",
+        style.COLORS["diabatic"],
+    ),
+    (
+        "benchmark_diabatic_term_physical",
+        "calculated_diabatic_term_physical",
+        r"Physical diabatic residual ($\mathcal{D}_{phys}$)",
+        "#7B3294",
+    ),
+)
 CORE_DIAGNOSTIC_VARIABLES = (
     "dV_dt",
     "domain_volume",
@@ -1110,3 +1140,130 @@ def plot_figure5_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> Non
     fig5_benchmark_comparison(ds_budget, plot_path)
     fig5_net_benchmark_comparison(ds_budget, plot_path)
     fig5_heat_flux_correlations(ds_budget, plot_path)
+
+
+def fig6_benchmark_heating_comparison(
+    ds_budget: xr.Dataset,
+    plot_dir: str | Path,
+) -> None:
+    """Plot aligned ERA5 and calculated full-column heating terms."""
+    _require_dataset_variables(ds_budget, FIG6_VARIABLES, "Figure 6")
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(
+        figsize=_publication_figsize("single", THREE_PANEL_STACK_ASPECT),
+        nrows=3,
+        sharex=True,
+    )
+
+    for axis, (benchmark_name, calculated_name, title, color) in zip(
+        axes,
+        FIG6_TERM_SPECS,
+    ):
+        benchmark, calculated = xr.align(
+            ds_budget[benchmark_name],
+            ds_budget[calculated_name],
+            join="inner",
+        )
+        axis.plot(
+            benchmark["time"],
+            benchmark,
+            linestyle="--",
+            color=color,
+            linewidth=LINE_WIDTH_PT,
+            alpha=0.7,
+            label="ERA5 benchmark",
+        )
+        axis.plot(
+            calculated["time"],
+            calculated,
+            linestyle="-",
+            color=color,
+            linewidth=LINE_WIDTH_PT,
+            label="Pressure-level calculation",
+        )
+        style.style_axis(axis)
+        style.zero_line(axis)
+        style.pad_y_limits(axis, fraction=0.08)
+        axis.set_ylabel(rf"[{HEAT_FLUX_UNITS}]")
+        axis.set_title(title, loc="left", pad=4)
+        style.inside_legend(
+            axis,
+            axis.lines[:2],
+            [line.get_label() for line in axis.lines[:2]],
+            ncol=2,
+        )
+
+    style.format_time_axis(axes[-1])
+    axes[-1].set_xlabel("Time")
+    for axis in axes[:-1]:
+        axis.set_xlabel("")
+
+    _apply_stacked_figure_layout(fig, 3)
+    style.save_figure(
+        fig,
+        plot_path / "fig6_benchmark_heating_comparison.png",
+    )
+    plt.close()
+
+
+def fig6_heating_correlations(
+    ds_budget: xr.Dataset,
+    plot_dir: str | Path,
+) -> None:
+    """Plot one-to-one panels for heating terms and mass-closure heating."""
+    _require_dataset_variables(ds_budget, FIG6_VARIABLES, "Figures 6.1 to 6.4")
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    correlation_specs = (
+        (
+            *FIG6_TERM_SPECS[0][:3],
+            "fig6.1_benchmark_vs_calculated_adiabatic.png",
+            FIG6_TERM_SPECS[0][3],
+        ),
+        (
+            *FIG6_TERM_SPECS[1][:3],
+            "fig6.2_benchmark_vs_calculated_diabatic_workflow.png",
+            FIG6_TERM_SPECS[1][3],
+        ),
+        (
+            *FIG6_TERM_SPECS[2][:3],
+            "fig6.3_benchmark_vs_calculated_diabatic_physical.png",
+            FIG6_TERM_SPECS[2][3],
+        ),
+        (
+            "benchmark_residual_heat",
+            "residual_heat",
+            r"Mass-closure heating ($\langle T\rangle\delta\mathcal{M}$)",
+            "fig6.4_benchmark_vs_calculated_residual_heat.png",
+            style.COLORS["residual"],
+        ),
+    )
+
+    for (
+        benchmark_name,
+        calculated_name,
+        title,
+        filename,
+        color,
+    ) in correlation_specs:
+        _plot_heat_flux_correlation(
+            ds_budget[benchmark_name],
+            ds_budget[calculated_name],
+            title,
+            plot_path / filename,
+            point_color=color,
+        )
+
+
+def plot_figure6_diagnostics(ds_budget: xr.Dataset, plot_dir: str | Path) -> None:
+    """Generate the full-column adiabatic and diabatic Figure 6 bundle."""
+    _require_dataset_variables(
+        ds_budget,
+        FIG6_VARIABLES,
+        "Figure 6 benchmark diagnostics",
+    )
+    fig6_benchmark_heating_comparison(ds_budget, plot_dir)
+    fig6_heating_correlations(ds_budget, plot_dir)
