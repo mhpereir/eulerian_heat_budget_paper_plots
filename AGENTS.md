@@ -104,19 +104,10 @@ dataset.
 
 ## Track long-running work
 
-Use `/home/mhpereir/work/TODO_global.md` as the global command center for work
-performed below `/home/mhpereir/work`.
-
-- Track an asynchronous plot run when it may outlive the current agent session,
-  has a process or PBS identity that must be recovered, or produces figures
-  requiring later review. Do not rely on a one-hour threshold alone.
-- Before submission, record the dataset, intended figure set, plotting branch
-  and commit, source EHB identity, selected period, resources, log path, and
-  output directory.
-- Record the exact PBS or managed-session ID immediately after launch. Monitor
-  initial state and logs for a few minutes and timestamp the observation.
-- Reconcile live state before restarting and append attempts instead of
-  overwriting prior job IDs or failure evidence.
+- Invoke the `command-center` skill for qualifying asynchronous plot runs.
+- In addition to the shared schema, record the dataset, intended figure set,
+  plotting branch and commit, source EHB identity, selected period, resources,
+  log path, and output directory.
 - Mark the task complete only after terminal success, non-empty figure
   creation, expected figure inventory, warning-free logs, and visual review of
   the real artifacts.
