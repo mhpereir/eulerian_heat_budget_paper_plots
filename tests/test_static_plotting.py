@@ -16,7 +16,7 @@ def _write_minimal_dataset(path):
         {"domain_volume": ("time", np.array([1.0, 2.0, 3.0]))},
         coords={"time": times},
     )
-    ds.to_netcdf(path)
+    ds.to_netcdf(path, engine="h5netcdf")
 
 
 def test_available_datasets_lists_folders_with_heat_budget(tmp_path):

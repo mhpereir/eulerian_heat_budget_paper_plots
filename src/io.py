@@ -81,7 +81,7 @@ def load_heat_budget(
             f"{paths.heat_budget_path}."
         )
 
-    ds = xr.open_dataset(paths.heat_budget_path)
+    ds = xr.open_dataset(paths.heat_budget_path, engine="h5netcdf")
     if "time" not in ds.coords and "time" not in ds.dims:
         ds.close()
         raise ValueError(
