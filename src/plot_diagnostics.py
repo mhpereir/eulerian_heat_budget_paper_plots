@@ -300,40 +300,6 @@ def fig1_mass_continuity(dV_dt: xr.DataArray, advection_terms: xr.Dataset, plot_
     _save_square_figure(fig, plot_dir + '/fig1_mass_continuity.png')
     plt.close(fig)
 
-    r = y - x
-
-    nbin = 20
-    edges = np.quantile(x, np.linspace(0, 1, nbin+1))
-    bin_id = np.digitize(x, edges[1:-1])
-
-    xb = np.array([np.nanmean(x[bin_id==i]) for i in range(nbin)])
-    rb = np.array([np.nanmean(r[bin_id==i]) for i in range(nbin)])
-
-    fig, ax = plt.subplots(
-        figsize=_publication_figsize("single", SINGLE_PANEL_ASPECT),
-    )
-    ax.plot(
-        xb,
-        rb,
-        marker="o",
-        color=style.COLORS["mass"],
-        linewidth=LINE_WIDTH_PT,
-        markersize=4,
-    )
-    ax.axhline(
-        0,
-        linestyle="--",
-        color=style.COLORS["advection"],
-        linewidth=style.REFERENCE_LINE_WIDTH_PT,
-    )
-    ax.set_xlabel(f"dV/dt [{MASS_FLUX_UNITS}]")
-    ax.set_ylabel(rf"Residual [{MASS_FLUX_UNITS}]")
-    ax.set_title("Binned mass-flux residual", loc="left", pad=4)
-    style.style_axis(ax)
-    style.pad_y_limits(ax, fraction=0.08)
-    style.save_figure(fig, plot_dir + "/fig1.3_mass_continuity_binned_residual.png")
-    plt.close(fig)
-
 
 def fig1_benchmark_mass_continuity(
     dV_dt: xr.DataArray,

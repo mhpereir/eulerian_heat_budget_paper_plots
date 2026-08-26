@@ -185,6 +185,22 @@ def test_benchmark_mode_dispatches_all_benchmark_figures(monkeypatch, tmp_path):
     assert calls == ["core", "figure5", "figure6", "figure7", "figure8"]
 
 
+def test_mass_continuity_omits_binned_residual_plot(tmp_path):
+    dV_dt = xr.DataArray([0.0, 0.0, 1.0, 1.0], dims="time")
+    advection_terms = xr.Dataset(
+        {"net_mass_advection": ("time", [0.1, -0.1, 1.1, 0.9])}
+    )
+
+    plot_diagnostics.fig1_mass_continuity(
+        dV_dt,
+        advection_terms,
+        str(tmp_path),
+    )
+
+    assert (tmp_path / "fig1_mass_continuity.png").is_file()
+    assert not (tmp_path / "fig1.3_mass_continuity_binned_residual.png").exists()
+
+
 def test_figure5_bundle_requires_per_face_benchmark_fields(tmp_path):
     times = np.array(
         ["1941-05-01T00:00:00", "1941-05-02T00:00:00"],
