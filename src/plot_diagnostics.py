@@ -1,12 +1,10 @@
-'''
+"""Publication diagnostics for reduced heat-budget datasets."""
 
-'''
-
-import xarray as xr
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
+import xarray as xr
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import AnchoredText
 from matplotlib.ticker import FuncFormatter, MultipleLocator
@@ -220,8 +218,7 @@ def _advection_terms_for_core_diagnostics(ds_budget: xr.Dataset) -> xr.Dataset:
         for name in ds_budget.data_vars
         if (
             name in {"net_mass_advection", "advection_term"}
-            or name.startswith("mass_flux_contribution_") #type: ignore
-            or name.startswith("flux_contribution_") #type: ignore
+            or name.startswith(("mass_flux_contribution_", "flux_contribution_"))
         )
     ]
     return ds_budget[advection_variables]
@@ -683,7 +680,6 @@ def fig3_advection_components_timeseries(advection_terms: xr.Dataset, dV_dt: xr.
     for component in advection_terms.data_vars:
         if "mass" in str(component) or "net" in str(component):
             mass_vars.append(str(component))
-            pass
         else:
             heat_vars.append(str(component))
             ax[0].plot(advection_terms['time'], advection_terms[component] * norm_factor * time_rate_conversion, label=component, linewidth=LINE_WIDTH_PT)

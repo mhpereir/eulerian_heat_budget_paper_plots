@@ -1,0 +1,13 @@
+name: dev_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - h5netcdf>=1.7,<2
+  - matplotlib>=3.10,<4
+  - numpy>=2.3,<3
+  - pandas>=2.2,<4
+  - pytest>=9,<10
+  - ruff>=0.16,<1
+  - seaborn>=0.13,<0.14
+  - xarray>=2025.12,<2027

@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N ehb_paper_plots
-#PBS -l select=1:ncpus=4:mem=8gb
-#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=1:mem=4gb
+#PBS -l walltime=00:10:00
 #PBS -j oe
 #PBS -o /dev/null
 
@@ -41,10 +41,15 @@ export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 
-export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-/home/mhpereir/miniconda3}"
+export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-${HOME:?HOME must be set}/miniconda3}"
 source "${MAMBA_ROOT_PREFIX}/etc/profile.d/mamba.sh"
-mamba activate "${EHB_PLOTS_CONDA_ENV:-dev_env}"
+VENUS_MAMBA_ENV="${VENUS_MAMBA_ENV:-${EHB_PLOTS_CONDA_ENV:-dev_env}}"
+mamba activate "${VENUS_MAMBA_ENV}"
 PYTHON_EXECUTABLE=$(command -v python)
+export MPLCONFIGDIR="${MPLCONFIGDIR:-${TMPDIR:-/tmp}/ehb-paper-mpl-${JOB_ID}}"
+mkdir -p "${MPLCONFIGDIR}"
+export MPLBACKEND=Agg
+export PYTHONWARNINGS=error
 
 ehb_bool_enabled() {
   case "${1:-0}" in
@@ -70,6 +75,15 @@ PLOT_ARGS=(
   --benchmark-diagnostics "${BENCHMARK_DIAGNOSTICS}"
 )
 
+if [[ -n "${STAGE1_FILE:-}${TEMPERATURE_CLIMATOLOGY_FILE:-}${TAS_THRESHOLD_FILE:-}" ]]; then
+  : "${STAGE1_FILE:?All three temperature context files must be supplied}"
+  : "${TEMPERATURE_CLIMATOLOGY_FILE:?All three temperature context files must be supplied}"
+  : "${TAS_THRESHOLD_FILE:?All three temperature context files must be supplied}"
+  PLOT_ARGS+=(--stage1-file "${STAGE1_FILE}"
+              --temperature-climatology-file "${TEMPERATURE_CLIMATOLOGY_FILE}"
+              --tas-threshold-file "${TAS_THRESHOLD_FILE}")
+fi
+
 if ehb_bool_enabled "${ENABLE_DIAGNOSTIC_PLOTS}"; then
   PLOT_ARGS+=(--diagnostic-plots)
 else
@@ -82,6 +96,8 @@ echo "[info] $(date -Is) starting publication plotting on host $(hostname)"
 echo "[info] repo root: ${PROJECT_ROOT}"
 echo "[info] expected commit: ${EXPECTED_COMMIT}"
 echo "[info] Python executable: ${PYTHON_EXECUTABLE}"
+echo "[info] environment: ${VENUS_MAMBA_ENV} (${CONDA_PREFIX})"
+echo "[info] job ID: ${JOB_ID}"
 echo "[info] log file: ${LOGFILE}"
 echo "[info] dataset: ${DATASET}"
 echo "[info] data root: ${DATA_ROOT}"
@@ -89,6 +105,7 @@ echo "[info] time range: ${TIME_START} to ${TIME_END}"
 echo "[info] plots root: ${PLOTS_ROOT}"
 echo "[info] diagnostic plots: ${ENABLE_DIAGNOSTIC_PLOTS}"
 echo "[info] benchmark diagnostics: ${BENCHMARK_DIAGNOSTICS}"
+echo "[info] temperature inputs: ${STAGE1_FILE:-none} ${TEMPERATURE_CLIMATOLOGY_FILE:-none} ${TAS_THRESHOLD_FILE:-none}"
 
 /usr/bin/time -v "${PYTHON_EXECUTABLE}" scripts/make_plots.py "${PLOT_ARGS[@]}"
 
