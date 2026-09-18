@@ -9,7 +9,7 @@ from pathlib import Path
 
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import AnchoredText
-from matplotlib.ticker import FuncFormatter, MultipleLocator
+from matplotlib.ticker import FuncFormatter
 
 from . import plot_style as style
 
@@ -552,7 +552,6 @@ def fig2_mass_advection_residual_timeseries(
     ax[1].set_xlabel("Time")
     style.pad_y_limits(ax[0], fraction=0.08, symmetric=True)
     style.pad_y_limits(ax[1], fraction=0.08)
-    ax[1].yaxis.set_major_locator(MultipleLocator(0.02))
     ax[1].yaxis.set_major_formatter(FuncFormatter(_format_cumulative_mass_tick))
     _apply_stacked_figure_layout(fig, 2)
     style.save_figure(fig, plot_dir + "/fig2_mass_residual_time_series.png")
