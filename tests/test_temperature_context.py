@@ -378,9 +378,21 @@ def test_daily_panel_averages_volume_temperature_only(campaign):
 
 @pytest.mark.parametrize("daily", [False, True])
 def test_single_column_layout_fonts_export_and_restoration(
-    campaign, monkeypatch, tmp_path, daily
+    monkeypatch, tmp_path, daily
 ):
-    request, budget, info = campaign
+    request, budget, info = make_campaign(tmp_path, periods=92 * 24)
+    for variable, amplitude in (
+        ("dT_dt", 2),
+        ("advection_term", 5),
+        ("adiabatic_term", 5),
+        ("diabatic_term", 2),
+    ):
+        budget[variable] = (
+            budget.domain_volume
+            * amplitude
+            * np.sin(np.arange(budget.sizes["time"]) / 100)
+            / 86400
+        )
     context = io.load_temperature_context(request, budget, info)
     original = budget.copy(deep=True)
     original_font = plt.rcParams["font.size"]
@@ -407,7 +419,7 @@ def test_single_column_layout_fonts_export_and_restoration(
     assert fig.axes[0].get_position().height / fig.axes[
         1
     ].get_position().height == pytest.approx(1.6)
-    assert "1940-2024" in fig.texts[0].get_text()
+    assert not fig.texts
     assert fig.axes[0].lines[0].get_color() == "#E60000"
     assert fig.axes[1].lines[0].get_color() == "#D55E00"
     assert [line.get_color() for line in fig.axes[2].lines[:3]] == [
@@ -428,8 +440,15 @@ def test_single_column_layout_fonts_export_and_restoration(
         assert ax.yaxis.label.get_fontsize() == 18
         assert ax._left_title.get_fontsize() == 18
         assert all(label.get_fontsize() == 18 for label in ax.get_yticklabels())
-        assert all(text.get_fontsize() == 14 for text in ax.get_legend().get_texts())
-    assert fig.texts[0].get_fontsize() == 14
+        assert all(text.get_fontsize() == 10.5 for text in ax.get_legend().get_texts())
+    for ax in fig.axes[1:]:
+        labels = [label.get_text() for label in ax.get_yticklabels()]
+        if daily:
+            assert all("." not in label for label in labels)
+            ticks = ax.get_yticks()
+            np.testing.assert_array_equal(ticks, np.round(ticks))
+        else:
+            assert all("." in label for label in labels)
     renderer = fig.canvas.get_renderer()
     for artist in [*(ax.get_legend() for ax in fig.axes), *fig.texts]:
         box = artist.get_window_extent(renderer)
@@ -448,6 +467,11 @@ def test_single_column_layout_fonts_export_and_restoration(
             ax._left_title.get_window_extent(renderer).y0
             > ax.get_legend().get_window_extent(renderer).y1
         )
+        gap_pt = (
+            ax._left_title.get_window_extent(renderer).y0
+            - ax.get_legend().get_window_extent(renderer).y1
+        ) * 72 / fig.dpi
+        assert gap_pt <= 6
     for upper, lower in zip(fig.axes, fig.axes[1:]):
         assert lower._left_title.get_window_extent(renderer).y1 < upper.bbox.y0
 
@@ -500,7 +524,8 @@ def test_end_to_end_inventory_manifest_and_no_overwrite(campaign):
     assert manifest["layout"]["width_inches"] == 6
     assert manifest["layout"]["height_inches"] == 10
     assert manifest["layout"]["font_size_pt"] == 18
-    assert manifest["layout"]["legend_font_size_pt"] == 14
+    assert manifest["layout"]["legend_font_size_pt"] == 10.5
+    assert manifest["layout"]["supplemental_footer"] is False
     assert manifest["layout"]["crop"] is False
     assert len(manifest["outputs"]) == 3
     for output in manifest["outputs"]:

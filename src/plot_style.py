@@ -10,7 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from matplotlib.ticker import AutoMinorLocator, Formatter, NullFormatter
+from matplotlib.ticker import AutoMinorLocator, Formatter, MaxNLocator, NullFormatter
 
 SINGLE_COLUMN_WIDTH_IN = 6
 FULL_TWO_COLUMN_WIDTH_IN = 12
@@ -18,7 +18,7 @@ FULL_TWO_COLUMN_WIDTH_IN = 12
 PAPER_FONT_SIZE_PT = 14
 LEGEND_FONT_SIZE_PT = 9
 SINGLE_COLUMN_FONT_SIZE_PT = 18
-SINGLE_COLUMN_LEGEND_FONT_SIZE_PT = 14
+SINGLE_COLUMN_LEGEND_FONT_SIZE_PT = 10.5
 LINE_WIDTH_PT = 1.25
 REFERENCE_LINE_WIDTH_PT = 0.9
 SCATTER_SIZE_PT2 = 16
@@ -38,10 +38,10 @@ TEMPERATURE_BAND_ALPHA = 0.15
 SQUARE_PANEL_ASPECT = 0.95
 RESULT_FIGURE_LAYOUT = {
     "left": 0.22,
-    "right": 0.97,
-    "bottom": 0.18,
-    "top": 0.81,
-    "hspace": 0.65,
+    "right": 0.96,
+    "bottom": 0.09,
+    "top": 0.87,
+    "hspace": 0.4,
 }
 
 VARIABLE_COLORS = {
@@ -321,6 +321,12 @@ def use_default_numeric_formatter(axis) -> None:
     axis._plot_style_use_default_numeric_formatter = True
 
 
+def use_integer_ticks(axis) -> None:
+    """Prefer whole-number ticks, retaining precision for sub-unit ranges."""
+    use_default_numeric_formatter(axis)
+    axis.set_major_locator(MaxNLocator(nbins="auto", integer=True))
+
+
 def _format_numeric_axis(ax, axis_name: str) -> None:
     axis = ax.xaxis if axis_name == "x" else ax.yaxis
     if getattr(axis, "_plot_style_use_default_numeric_formatter", False):
@@ -349,26 +355,16 @@ def apply_stacked_layout(fig, nrows: int, *, width: str = "single") -> None:
 
 
 def apply_result_layout(fig) -> None:
-    """Keep the larger legends above the data and inside the fixed canvas."""
+    """Fit titles closely above their legends without covering the data."""
     fig.subplots_adjust(**RESULT_FIGURE_LAYOUT)
+    renderer = fig.canvas.get_renderer()
     for ax in fig.axes:
         legend = ax.get_legend()
         legend.set_loc("lower right")
         legend.set_bbox_to_anchor((1, 1.02), transform=ax.transAxes)
-        title_pad = 80 if len(legend.get_texts()) > 3 else 44
+        legend_top = legend.get_window_extent(renderer).y1
+        title_pad = (legend_top - ax.bbox.y1) * 72 / fig.dpi + 4
         ax.set_title(ax.get_title(loc="left"), loc="left", pad=title_pad)
-
-
-def add_result_note(fig, text: str) -> None:
-    """Reserve a figure-level explanation without crowding the temperature axis."""
-    fig.text(
-        RESULT_FIGURE_LAYOUT["left"],
-        0.025,
-        text,
-        ha="left",
-        va="bottom",
-        fontsize=legend_font_size(),
-    )
 
 
 def save_figure(fig, path: str | Path, *, crop: bool = True) -> None:

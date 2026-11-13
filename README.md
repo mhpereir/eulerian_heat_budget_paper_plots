@@ -59,14 +59,16 @@ band spans the evolving T2m mean to q90. There is no percentile band for the
 volume mean. Daily T2m and both daily references remain steps, including in the
 24-hour-smoothed figure. Only the hourly volume mean and its hourly climatology
 receive the same centered rolling mean (`min_periods=1`); the daily figure
-averages their selected hourly samples. A figure note identifies both distinct
-baseline conventions. Result figures use a 6-by-10-inch single-column canvas
-with 18 pt labels, ticks and titles, and 14 pt legends and baseline notes.
-This follows the HW_analysis single-column typography convention; reducing
-the figure to a 3.5-inch manuscript column gives approximately 10.5/8.2 pt
-text. Top-panel height remains 1.6 times either lower panel. Legends and the
-baseline note wrap within the canvas, and export preserves the exact canvas
-at 300 DPI (1800 by 3000 pixels).
+averages their selected hourly samples. Baseline conventions remain documented
+here and in the manifest; the figures have no supplemental footer.
+Result figures use a 6-by-10-inch single-column canvas with the HW_analysis
+18 pt labels, ticks and titles, and smaller 10.5 pt legends. Reducing the figure
+to a 3.5-inch manuscript column gives approximately 10.5/6.1 pt text.
+Top-panel height remains 1.6 times either lower panel. Titles sit closely above
+the legends, with spacing determined by legend height. Both daily budget axes
+prefer integer ticks; fractional ticks are retained for sub-unit ranges so
+distinct values are not rounded to the same label. Hourly tick precision is
+unchanged. Export preserves the exact canvas at 300 DPI (1800 by 3000 pixels).
 
 The result palette matches the corresponding variables in the HW_analysis
 PNW top-event figures at commit `3736891`: volume temperature `#E60000`,

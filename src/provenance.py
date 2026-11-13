@@ -93,6 +93,8 @@ def build_manifest(request, paths, budget, run_info, context):
             "panel_height_ratios": plot_style.RESULT_HEIGHT_RATIOS,
             "font_size_pt": plot_style.SINGLE_COLUMN_FONT_SIZE_PT,
             "legend_font_size_pt": plot_style.SINGLE_COLUMN_LEGEND_FONT_SIZE_PT,
+            "daily_budget_ticks": "integer where the data range permits",
+            "supplemental_footer": False,
             "dpi": plot_style.DPI,
             "crop": False,
             "colors": {

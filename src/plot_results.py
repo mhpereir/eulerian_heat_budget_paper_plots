@@ -195,29 +195,6 @@ def _extend_daily_steps(da: xr.DataArray) -> xr.DataArray:
     return xr.concat([da, edge], dim="time")
 
 
-def _add_temperature_note(
-    fig, context: TemperatureContext | None, *, daily: bool, window: int = 1
-):
-    if context is None:
-        return
-    baseline = context.provenance["T_mean_climatology"]
-    years = context.provenance["T2m_reference"]["selected_years"]
-    year_label = (
-        str(years[0]) if len(years) == 1 else f"{years[0]}-{years[-1]} (year-specific)"
-    )
-    resolution = (
-        "daily means"
-        if daily
-        else ("hourly" if window == 1 else f"{window}-hour centered means")
-    )
-    style.add_result_note(
-        fig,
-        f"T2m: daily; {year_label} evolving mean and q90.\n"
-        rf"$\langle T\rangle$: {resolution};"
-        f"\nfixed {baseline['start_year']}-{baseline['end_year']} climatology.",
-    )
-
-
 def _add_tendency_panel(ax, terms: dict[str, xr.DataArray], *, units: str, daily: bool):
     drawstyle = "steps-post" if daily else None
     lines = [
@@ -366,10 +343,6 @@ def plot_budget_terms_hourly(
     style.apply_result_layout(fig)
     if ds_budget.sizes["time"] > 1:
         ax[-1].set_xlim(ds_budget.time.values[0], ds_budget.time.values[-1])
-    _add_temperature_note(
-        fig, temperature_context, daily=False, window=smoothing_window
-    )
-
     out_path = (
         plot_path
         / f"budget_terms_timeseries_hourly_smoothwindow_{smoothing_window}.png"
@@ -405,8 +378,9 @@ def plot_budget_terms_day_bin(
     _add_budget_terms_panel(ax[2], terms, ds_budget, units=units, daily=True)
     _set_shared_symmetric_budget_limits(ax)
     _format_result_axes(ax)
+    for budget_axis in ax[1:]:
+        style.use_integer_ticks(budget_axis.yaxis)
     style.apply_result_layout(fig)
-    _add_temperature_note(fig, temperature_context, daily=True)
 
     style.save_figure(fig, plot_path / "budget_terms_timeseries_daily.png", crop=False)
     plt.close(fig)
