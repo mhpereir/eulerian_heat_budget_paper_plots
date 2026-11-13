@@ -60,8 +60,22 @@ volume mean. Daily T2m and both daily references remain steps, including in the
 24-hour-smoothed figure. Only the hourly volume mean and its hourly climatology
 receive the same centered rolling mean (`min_periods=1`); the daily figure
 averages their selected hourly samples. A figure note identifies both distinct
-baseline conventions. Top-panel height is 1.6 times either lower panel, on a
-12-by-9-inch canvas.
+baseline conventions. Result figures use a 6-by-10-inch single-column canvas
+with 18 pt labels, ticks and titles, and 14 pt legends and baseline notes.
+This follows the HW_analysis single-column typography convention; reducing
+the figure to a 3.5-inch manuscript column gives approximately 10.5/8.2 pt
+text. Top-panel height remains 1.6 times either lower panel. Legends and the
+baseline note wrap within the canvas, and export preserves the exact canvas
+at 300 DPI (1800 by 3000 pixels).
+
+The result palette matches the corresponding variables in the HW_analysis
+PNW top-event figures at commit `3736891`: volume temperature `#E60000`,
+temperature tendency and diabatic heating `#D55E00`, advection `#2636CA`,
+and adiabatic heating `#0DAF43`. T2m and its references remain `#0072B2`.
+The single-column font context is restricted to result rendering; diagnostic
+figures retain their existing dimensions and 14/9 pt theme. Data loading,
+daily sums, hourly smoothing, uncertainty bands and temperature references
+are unchanged. Existing datasets are sufficient to regenerate the figures.
 
 Temperature-context runs write `plot_manifest.json` beside the figure folders,
 including source checksums, unit resolutions, baseline definitions, the EHB

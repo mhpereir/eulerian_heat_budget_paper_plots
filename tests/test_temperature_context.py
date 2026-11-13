@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 from matplotlib import pyplot as plt
+from PIL import Image
 
 from src import cli, io, plot_results, plot_style
 from src.specs import PlotRequest
@@ -375,24 +376,92 @@ def test_daily_panel_averages_volume_temperature_only(campaign):
         plt.close(fig)
 
 
-def test_plot_layout_and_tendency_title(campaign, monkeypatch, tmp_path):
+@pytest.mark.parametrize("daily", [False, True])
+def test_single_column_layout_fonts_export_and_restoration(
+    campaign, monkeypatch, tmp_path, daily
+):
     request, budget, info = campaign
     context = io.load_temperature_context(request, budget, info)
+    original = budget.copy(deep=True)
+    original_font = plt.rcParams["font.size"]
+    original_legend = plt.rcParams["legend.fontsize"]
     captured = []
     monkeypatch.setattr(
-        plot_style, "save_figure", lambda fig, path: captured.append(fig)
+        plot_style,
+        "save_figure",
+        lambda fig, path, **kwargs: captured.append((fig, kwargs)),
     )
-    plot_results.plot_budget_terms_hourly(
-        budget, 24, str(tmp_path), temperature_context=context
-    )
-    fig = captured[0]
+    if daily:
+        plot_results.plot_budget_terms_day_bin(
+            budget, str(tmp_path), temperature_context=context
+        )
+    else:
+        plot_results.plot_budget_terms_hourly(
+            budget, 24, str(tmp_path), temperature_context=context
+        )
+    fig, export_options = captured[0]
+    assert export_options == {"crop": False}
     assert len(fig.axes) == 3
     assert fig.axes[1].get_title(loc="left") == "Temperature tendency"
-    np.testing.assert_allclose(fig.get_size_inches(), [12, 9])
+    np.testing.assert_allclose(fig.get_size_inches(), [6, 10])
     assert fig.axes[0].get_position().height / fig.axes[
         1
     ].get_position().height == pytest.approx(1.6)
     assert "1940-2024" in fig.texts[0].get_text()
+    assert fig.axes[0].lines[0].get_color() == "#E60000"
+    assert fig.axes[1].lines[0].get_color() == "#D55E00"
+    assert [line.get_color() for line in fig.axes[2].lines[:3]] == [
+        "#2636CA", "#0DAF43", "#D55E00"
+    ]
+    assert plt.rcParams["font.size"] == original_font
+    assert plt.rcParams["legend.fontsize"] == original_legend
+    xr.testing.assert_identical(budget, original)
+
+    # Export after leaving the context: existing artists must retain their fonts.
+    monkeypatch.undo()
+    image_path = tmp_path / "single.png"
+    plot_style.save_figure(fig, image_path, crop=False)
+    with Image.open(image_path) as image:
+        assert image.size == (1800, 3000)
+    fig.canvas.draw()
+    for ax in fig.axes:
+        assert ax.yaxis.label.get_fontsize() == 18
+        assert ax._left_title.get_fontsize() == 18
+        assert all(label.get_fontsize() == 18 for label in ax.get_yticklabels())
+        assert all(text.get_fontsize() == 14 for text in ax.get_legend().get_texts())
+    assert fig.texts[0].get_fontsize() == 14
+    renderer = fig.canvas.get_renderer()
+    for artist in [*(ax.get_legend() for ax in fig.axes), *fig.texts]:
+        box = artist.get_window_extent(renderer)
+        assert box.x0 >= 0 and box.y0 >= 0
+        assert box.x1 <= fig.bbox.width and box.y1 <= fig.bbox.height
+    for ax in fig.axes:
+        artists = [ax.xaxis.label, ax.yaxis.label, ax._left_title]
+        artists.extend(ax.get_xticklabels() + ax.get_yticklabels())
+        for artist in artists:
+            if artist.get_visible() and artist.get_text():
+                box = artist.get_window_extent(renderer)
+                assert box.x0 >= 0 and box.y0 >= 0, artist.get_text()
+                assert box.x1 <= fig.bbox.width and box.y1 <= fig.bbox.height
+        assert ax.get_legend().get_window_extent(renderer).y0 > ax.bbox.y1
+        assert (
+            ax._left_title.get_window_extent(renderer).y0
+            > ax.get_legend().get_window_extent(renderer).y1
+        )
+    for upper, lower in zip(fig.axes, fig.axes[1:]):
+        assert lower._left_title.get_window_extent(renderer).y1 < upper.bbox.y0
+
+    # A later diagnostic figure still uses the original shared theme.
+    diagnostic, ax = plt.subplots()
+    try:
+        line, = ax.plot([0, 1], [0, 1], label="Diagnostic")
+        ax.set_ylabel("Value")
+        plot_style.inside_legend(ax, [line], [line.get_label()])
+        plot_style.save_figure(diagnostic, tmp_path / "diagnostic.png")
+        assert ax.yaxis.label.get_fontsize() == original_font
+        assert ax.get_legend().get_texts()[0].get_fontsize() == original_legend
+    finally:
+        plt.close(diagnostic)
 
 
 def test_budget_arithmetic_unchanged(campaign):
@@ -428,6 +497,11 @@ def test_end_to_end_inventory_manifest_and_no_overwrite(campaign):
     assert not paths.diagnostics_dir.exists()
     manifest = json.loads((paths.results_dir.parent / "plot_manifest.json").read_text())
     assert manifest["selection"]["hourly_samples"] == 72
+    assert manifest["layout"]["width_inches"] == 6
+    assert manifest["layout"]["height_inches"] == 10
+    assert manifest["layout"]["font_size_pt"] == 18
+    assert manifest["layout"]["legend_font_size_pt"] == 14
+    assert manifest["layout"]["crop"] is False
     assert len(manifest["outputs"]) == 3
     for output in manifest["outputs"]:
         assert io.file_provenance(output["path"])["sha256"] == output["sha256"]

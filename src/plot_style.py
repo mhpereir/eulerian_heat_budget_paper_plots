@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import contextmanager
 from pathlib import Path
 
 import matplotlib.dates as mdates
@@ -16,6 +17,8 @@ FULL_TWO_COLUMN_WIDTH_IN = 12
 
 PAPER_FONT_SIZE_PT = 14
 LEGEND_FONT_SIZE_PT = 9
+SINGLE_COLUMN_FONT_SIZE_PT = 18
+SINGLE_COLUMN_LEGEND_FONT_SIZE_PT = 14
 LINE_WIDTH_PT = 1.25
 REFERENCE_LINE_WIDTH_PT = 0.9
 SCATTER_SIZE_PT2 = 16
@@ -28,11 +31,18 @@ AXIS_SCALE_HIGH_THRESHOLD = 1e3
 SINGLE_PANEL_ASPECT = 0.6
 TWO_PANEL_STACK_ASPECT = 0.55
 THREE_PANEL_STACK_ASPECT = 0.62
-RESULT_STACK_ASPECT = 0.75
+RESULT_WIDTH = "single"
+RESULT_STACK_ASPECT = 5 / 3
 RESULT_HEIGHT_RATIOS = (1.6, 1, 1)
 TEMPERATURE_BAND_ALPHA = 0.15
-RESULT_NOTE_FONT_SIZE_PT = 9
 SQUARE_PANEL_ASPECT = 0.95
+RESULT_FIGURE_LAYOUT = {
+    "left": 0.22,
+    "right": 0.97,
+    "bottom": 0.18,
+    "top": 0.81,
+    "hspace": 0.65,
+}
 
 VARIABLE_COLORS = {
     "T_mean": "#E60000",
@@ -60,7 +70,7 @@ COLORS = {
     "surface_temperature": "#0072B2",
     "storage": "#D55E00",
     "volume_tendency": "#0072B2",
-    "temperature_tendency": "#009E73",
+    "temperature_tendency": VARIABLE_COLORS["dTdt"],
     "advection": VARIABLE_COLORS["advection"],
     "adiabatic": VARIABLE_COLORS["adiabatic"],
     "diabatic": VARIABLE_COLORS["diabatic"],
@@ -159,6 +169,42 @@ def publication_figsize(
     return figure_width, figure_width * aspect
 
 
+@contextmanager
+def font_context(width: str = "full"):
+    """Apply publication typography only while constructing a figure."""
+    sizes = {
+        "single": (SINGLE_COLUMN_FONT_SIZE_PT, SINGLE_COLUMN_LEGEND_FONT_SIZE_PT),
+        "full": (PAPER_FONT_SIZE_PT, LEGEND_FONT_SIZE_PT),
+    }
+    if width not in sizes:
+        raise ValueError("Font width must be 'single' or 'full'.")
+    paper_size, legend_size = sizes[width]
+    settings = dict.fromkeys(
+        (
+            "font.size",
+            "axes.labelsize",
+            "axes.titlesize",
+            "xtick.labelsize",
+            "ytick.labelsize",
+            "figure.titlesize",
+        ),
+        paper_size,
+    )
+    settings.update(
+        {"legend.fontsize": legend_size, "legend.title_fontsize": legend_size}
+    )
+    with plt.rc_context(settings):
+        yield
+
+
+def legend_font_size() -> float:
+    return float(plt.rcParams["legend.fontsize"])
+
+
+def result_figsize() -> tuple[int, float]:
+    return publication_figsize(RESULT_WIDTH, RESULT_STACK_ASPECT)
+
+
 def date_locator_formatter() -> tuple[
     mdates.AutoDateLocator, mdates.ConciseDateFormatter
 ]:
@@ -189,8 +235,8 @@ def style_axis(ax, *, grid: bool = True) -> None:
     ax.tick_params(axis="both", which="major", length=4, pad=3)
     ax.tick_params(axis="both", which="minor", length=2.5)
     ax.margins(x=0.015)
-    ax.yaxis.get_offset_text().set_fontsize(PAPER_FONT_SIZE_PT)
-    ax.xaxis.get_offset_text().set_fontsize(PAPER_FONT_SIZE_PT)
+    ax.yaxis.get_offset_text().set_fontsize(plt.rcParams["ytick.labelsize"])
+    ax.xaxis.get_offset_text().set_fontsize(plt.rcParams["xtick.labelsize"])
     sns.despine(ax=ax)
 
 
@@ -302,14 +348,33 @@ def apply_stacked_layout(fig, nrows: int, *, width: str = "single") -> None:
     fig.subplots_adjust(**STACKED_FIGURE_LAYOUTS[(width, nrows)])
 
 
+def apply_result_layout(fig) -> None:
+    """Keep the larger legends above the data and inside the fixed canvas."""
+    fig.subplots_adjust(**RESULT_FIGURE_LAYOUT)
+    for ax in fig.axes:
+        legend = ax.get_legend()
+        legend.set_loc("lower right")
+        legend.set_bbox_to_anchor((1, 1.02), transform=ax.transAxes)
+        title_pad = 80 if len(legend.get_texts()) > 3 else 44
+        ax.set_title(ax.get_title(loc="left"), loc="left", pad=title_pad)
+
+
 def add_result_note(fig, text: str) -> None:
     """Reserve a figure-level explanation without crowding the temperature axis."""
-    fig.text(0.08, 0.005, text, ha="left", va="top", fontsize=RESULT_NOTE_FONT_SIZE_PT)
+    fig.text(
+        RESULT_FIGURE_LAYOUT["left"],
+        0.025,
+        text,
+        ha="left",
+        va="bottom",
+        fontsize=legend_font_size(),
+    )
 
 
-def save_figure(fig, path: str | Path) -> None:
+def save_figure(fig, path: str | Path, *, crop: bool = True) -> None:
     format_numeric_axes(fig)
-    fig.savefig(path, dpi=DPI, bbox_inches="tight", pad_inches=0.04)
+    with plt.rc_context({"savefig.bbox": "tight" if crop else None}):
+        fig.savefig(path, dpi=DPI, pad_inches=0.04)
 
 
 def legend_kwargs(**overrides) -> dict:
@@ -321,7 +386,7 @@ def legend_kwargs(**overrides) -> dict:
         "handlelength": 2.2,
         "borderpad": 0.5,
         "labelspacing": 0.4,
-        "fontsize": LEGEND_FONT_SIZE_PT,
+        "fontsize": legend_font_size(),
     }
     kwargs.update(overrides)
     return kwargs

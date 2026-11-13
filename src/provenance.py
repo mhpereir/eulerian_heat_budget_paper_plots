@@ -87,10 +87,25 @@ def build_manifest(request, paths, budget, run_info, context):
         },
         "temperature_context": context.provenance,
         "layout": {
-            "width_inches": plot_style.FULL_TWO_COLUMN_WIDTH_IN,
-            "height_inches": plot_style.FULL_TWO_COLUMN_WIDTH_IN
-            * plot_style.RESULT_STACK_ASPECT,
+            "width": plot_style.RESULT_WIDTH,
+            "width_inches": plot_style.result_figsize()[0],
+            "height_inches": plot_style.result_figsize()[1],
             "panel_height_ratios": plot_style.RESULT_HEIGHT_RATIOS,
+            "font_size_pt": plot_style.SINGLE_COLUMN_FONT_SIZE_PT,
+            "legend_font_size_pt": plot_style.SINGLE_COLUMN_LEGEND_FONT_SIZE_PT,
+            "dpi": plot_style.DPI,
+            "crop": False,
+            "colors": {
+                name: plot_style.COLORS[name]
+                for name in (
+                    "temperature",
+                    "surface_temperature",
+                    "temperature_tendency",
+                    "advection",
+                    "adiabatic",
+                    "diabatic",
+                )
+            },
         },
     }
 

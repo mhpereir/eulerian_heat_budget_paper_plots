@@ -11,8 +11,6 @@ from matplotlib import pyplot as plt
 from . import plot_style as style
 from .specs import TemperatureContext
 
-RESULT_WIDTH = "full"
-RESULT_ASPECT = style.RESULT_STACK_ASPECT
 HOURLY_RATE_SCALE = 3600
 
 
@@ -214,8 +212,9 @@ def _add_temperature_note(
     )
     style.add_result_note(
         fig,
-        f"T2m: daily; evolving mean and q90 for {year_label}. "
-        rf"$\langle T\rangle$: {resolution}; fixed {baseline['start_year']}-{baseline['end_year']} climatology.",
+        f"T2m: daily; {year_label} evolving mean and q90.\n"
+        rf"$\langle T\rangle$: {resolution};"
+        f"\nfixed {baseline['start_year']}-{baseline['end_year']} climatology.",
     )
 
 
@@ -326,6 +325,7 @@ def _set_shared_symmetric_budget_limits(axes) -> None:
         axes[2].set_ylim(-1.08 * ymax, 1.08 * ymax)
 
 
+@style.font_context(style.RESULT_WIDTH)
 def plot_budget_terms_hourly(
     ds_budget: xr.Dataset,
     smoothing_window: int,
@@ -340,7 +340,7 @@ def plot_budget_terms_hourly(
     units = r"[K hr$^{-1}$]"
 
     fig, ax = plt.subplots(
-        figsize=style.publication_figsize(RESULT_WIDTH, RESULT_ASPECT),
+        figsize=style.result_figsize(),
         nrows=3,
         sharex=True,
         gridspec_kw={"height_ratios": style.RESULT_HEIGHT_RATIOS},
@@ -363,7 +363,7 @@ def plot_budget_terms_hourly(
     )
     _set_shared_symmetric_budget_limits(ax)
     _format_result_axes(ax)
-    style.apply_stacked_layout(fig, 3, width=RESULT_WIDTH)
+    style.apply_result_layout(fig)
     if ds_budget.sizes["time"] > 1:
         ax[-1].set_xlim(ds_budget.time.values[0], ds_budget.time.values[-1])
     _add_temperature_note(
@@ -374,10 +374,11 @@ def plot_budget_terms_hourly(
         plot_path
         / f"budget_terms_timeseries_hourly_smoothwindow_{smoothing_window}.png"
     )
-    style.save_figure(fig, out_path)
+    style.save_figure(fig, out_path, crop=False)
     plt.close(fig)
 
 
+@style.font_context(style.RESULT_WIDTH)
 def plot_budget_terms_day_bin(
     ds_budget: xr.Dataset,
     plot_dir: str,
@@ -391,7 +392,7 @@ def plot_budget_terms_day_bin(
     units = r"[K day$^{-1}$]"
 
     fig, ax = plt.subplots(
-        figsize=style.publication_figsize(RESULT_WIDTH, RESULT_ASPECT),
+        figsize=style.result_figsize(),
         nrows=3,
         sharex=True,
         gridspec_kw={"height_ratios": style.RESULT_HEIGHT_RATIOS},
@@ -404,10 +405,10 @@ def plot_budget_terms_day_bin(
     _add_budget_terms_panel(ax[2], terms, ds_budget, units=units, daily=True)
     _set_shared_symmetric_budget_limits(ax)
     _format_result_axes(ax)
-    style.apply_stacked_layout(fig, 3, width=RESULT_WIDTH)
+    style.apply_result_layout(fig)
     _add_temperature_note(fig, temperature_context, daily=True)
 
-    style.save_figure(fig, plot_path / "budget_terms_timeseries_daily.png")
+    style.save_figure(fig, plot_path / "budget_terms_timeseries_daily.png", crop=False)
     plt.close(fig)
 
 
