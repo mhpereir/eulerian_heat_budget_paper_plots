@@ -34,14 +34,15 @@ THREE_PANEL_STACK_ASPECT = 0.62
 RESULT_WIDTH = "single"
 RESULT_STACK_ASPECT = 5 / 3
 RESULT_HEIGHT_RATIOS = (1.6, 1, 1)
+RESULT_LEFT_WHITESPACE_SCALE = 0.75
 TEMPERATURE_BAND_ALPHA = 0.15
 SQUARE_PANEL_ASPECT = 0.95
 RESULT_FIGURE_LAYOUT = {
     "left": 0.22,
     "right": 0.96,
     "bottom": 0.09,
-    "top": 0.87,
-    "hspace": 0.4,
+    "top": 0.91,
+    "hspace": 0.24,
 }
 
 VARIABLE_COLORS = {
@@ -355,16 +356,21 @@ def apply_stacked_layout(fig, nrows: int, *, width: str = "single") -> None:
 
 
 def apply_result_layout(fig) -> None:
-    """Fit titles closely above their legends without covering the data."""
+    """Keep legends above the data and trim the visible left-hand whitespace."""
     fig.subplots_adjust(**RESULT_FIGURE_LAYOUT)
-    renderer = fig.canvas.get_renderer()
     for ax in fig.axes:
         legend = ax.get_legend()
         legend.set_loc("lower right")
         legend.set_bbox_to_anchor((1, 1.02), transform=ax.transAxes)
-        legend_top = legend.get_window_extent(renderer).y1
-        title_pad = (legend_top - ax.bbox.y1) * 72 / fig.dpi + 4
-        ax.set_title(ax.get_title(loc="left"), loc="left", pad=title_pad)
+    # Measure the complete labels, including the wider hourly budget ticks.
+    # Scaling the subplot margin itself would cut into those labels.
+    format_numeric_axes(fig)
+    fig.canvas.draw()
+    left_blank = fig.get_tightbbox(fig.canvas.get_renderer()).x0 / fig.get_figwidth()
+    fig.subplots_adjust(
+        left=RESULT_FIGURE_LAYOUT["left"]
+        - (1 - RESULT_LEFT_WHITESPACE_SCALE) * max(left_blank, 0)
+    )
 
 
 def save_figure(fig, path: str | Path, *, crop: bool = True) -> None:

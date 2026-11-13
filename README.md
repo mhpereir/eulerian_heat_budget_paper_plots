@@ -62,10 +62,13 @@ receive the same centered rolling mean (`min_periods=1`); the daily figure
 averages their selected hourly samples. Baseline conventions remain documented
 here and in the manifest; the figures have no supplemental footer.
 Result figures use a 6-by-10-inch single-column canvas with the HW_analysis
-18 pt labels, ticks and titles, and smaller 10.5 pt legends. Reducing the figure
+18 pt labels and ticks, and smaller 10.5 pt legends. Reducing the figure
 to a 3.5-inch manuscript column gives approximately 10.5/6.1 pt text.
-Top-panel height remains 1.6 times either lower panel. Titles sit closely above
-the legends, with spacing determined by legend height. Both daily budget axes
+Top-panel height remains 1.6 times either lower panel. Panel titles are omitted.
+The temperature legend groups all three T2m entries in its first column and
+the two volume-temperature entries in its second. Visible left-hand whitespace
+is reduced to 75% of the previous margin, measured outside the complete labels
+to avoid clipping the wider hourly ticks. Both daily budget axes
 prefer integer ticks; fractional ticks are retained for sub-unit ranges so
 distinct values are not rounded to the same label. Hourly tick precision is
 unchanged. Export preserves the exact canvas at 300 DPI (1800 by 3000 pixels).

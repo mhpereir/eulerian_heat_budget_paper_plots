@@ -95,6 +95,9 @@ def build_manifest(request, paths, budget, run_info, context):
             "legend_font_size_pt": plot_style.SINGLE_COLUMN_LEGEND_FONT_SIZE_PT,
             "daily_budget_ticks": "integer where the data range permits",
             "supplemental_footer": False,
+            "panel_titles": False,
+            "temperature_legend_columns": ["T2m", "volume temperature"],
+            "left_whitespace_scale": plot_style.RESULT_LEFT_WHITESPACE_SCALE,
             "dpi": plot_style.DPI,
             "crop": False,
             "colors": {

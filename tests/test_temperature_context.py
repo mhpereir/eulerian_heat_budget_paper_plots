@@ -338,7 +338,7 @@ def test_hourly_panel_four_curves_single_band_and_no_volume(campaign, window):
         assert len(fig.axes) == 1
         assert len(ax.lines) == 4 and len(ax.collections) == 1
         assert ax.get_ylabel() == "Temperature [K]"
-        assert ax.get_title(loc="left") == "Temperature"
+        assert not ax.get_title(loc="left")
         assert [line.get_linestyle() for line in ax.lines] == ["-", "--", "-", "--"]
         expected = budget.T_domain_avg.rolling(
             time=window, center=True, min_periods=1
@@ -414,7 +414,19 @@ def test_single_column_layout_fonts_export_and_restoration(
     fig, export_options = captured[0]
     assert export_options == {"crop": False}
     assert len(fig.axes) == 3
-    assert fig.axes[1].get_title(loc="left") == "Temperature tendency"
+    assert all(
+        not ax.get_title(loc=loc)
+        for ax in fig.axes
+        for loc in ("left", "center", "right")
+    )
+    assert fig.subplotpars.left < 0.22
+    assert [text.get_text() for text in fig.axes[0].get_legend().get_texts()] == [
+        "T2m (daily)",
+        "T2m climatology",
+        "T2m mean to q90",
+        r"$\langle T\rangle$",
+        r"$\langle T\rangle$ climatology",
+    ]
     np.testing.assert_allclose(fig.get_size_inches(), [6, 10])
     assert fig.axes[0].get_position().height / fig.axes[
         1
@@ -438,7 +450,6 @@ def test_single_column_layout_fonts_export_and_restoration(
     fig.canvas.draw()
     for ax in fig.axes:
         assert ax.yaxis.label.get_fontsize() == 18
-        assert ax._left_title.get_fontsize() == 18
         assert all(label.get_fontsize() == 18 for label in ax.get_yticklabels())
         assert all(text.get_fontsize() == 10.5 for text in ax.get_legend().get_texts())
     for ax in fig.axes[1:]:
@@ -455,7 +466,7 @@ def test_single_column_layout_fonts_export_and_restoration(
         assert box.x0 >= 0 and box.y0 >= 0
         assert box.x1 <= fig.bbox.width and box.y1 <= fig.bbox.height
     for ax in fig.axes:
-        artists = [ax.xaxis.label, ax.yaxis.label, ax._left_title]
+        artists = [ax.xaxis.label, ax.yaxis.label]
         artists.extend(ax.get_xticklabels() + ax.get_yticklabels())
         for artist in artists:
             if artist.get_visible() and artist.get_text():
@@ -463,17 +474,15 @@ def test_single_column_layout_fonts_export_and_restoration(
                 assert box.x0 >= 0 and box.y0 >= 0, artist.get_text()
                 assert box.x1 <= fig.bbox.width and box.y1 <= fig.bbox.height
         assert ax.get_legend().get_window_extent(renderer).y0 > ax.bbox.y1
-        assert (
-            ax._left_title.get_window_extent(renderer).y0
-            > ax.get_legend().get_window_extent(renderer).y1
-        )
-        gap_pt = (
-            ax._left_title.get_window_extent(renderer).y0
-            - ax.get_legend().get_window_extent(renderer).y1
-        ) * 72 / fig.dpi
-        assert gap_pt <= 6
     for upper, lower in zip(fig.axes, fig.axes[1:]):
-        assert lower._left_title.get_window_extent(renderer).y1 < upper.bbox.y0
+        assert lower.get_legend().get_window_extent(renderer).y1 < upper.bbox.y0
+    legend_boxes = [
+        text.get_window_extent(renderer)
+        for text in fig.axes[0].get_legend().get_texts()
+    ]
+    assert len({box.x0 for box in legend_boxes[:3]}) == 1
+    assert len({box.x0 for box in legend_boxes[3:]}) == 1
+    assert legend_boxes[2].x1 < legend_boxes[3].x0
 
     # A later diagnostic figure still uses the original shared theme.
     diagnostic, ax = plt.subplots()
@@ -526,6 +535,8 @@ def test_end_to_end_inventory_manifest_and_no_overwrite(campaign):
     assert manifest["layout"]["font_size_pt"] == 18
     assert manifest["layout"]["legend_font_size_pt"] == 10.5
     assert manifest["layout"]["supplemental_footer"] is False
+    assert manifest["layout"]["panel_titles"] is False
+    assert manifest["layout"]["left_whitespace_scale"] == 0.75
     assert manifest["layout"]["crop"] is False
     assert len(manifest["outputs"]) == 3
     for output in manifest["outputs"]:

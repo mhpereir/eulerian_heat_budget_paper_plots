@@ -129,7 +129,6 @@ def _add_domain_state_panel(
     )
     ax.set_ylabel("Temperature [K]")
     style.use_default_numeric_formatter(ax.yaxis)
-    ax.set_title("Temperature", loc="left", pad=4)
     handles = [line_temperature]
     if temperature_context is not None:
         context = temperature_context.series
@@ -157,11 +156,12 @@ def _add_domain_state_panel(
             name: _extend_daily_steps(context[name].resample(time="1D").first())
             for name in ("tas", "tas_climatology", "tas_q90")
         }
+        surface_handles = []
         for name, label, linestyle in (
             ("tas", "T2m (daily)", "-"),
             ("tas_climatology", "T2m climatology", "--"),
         ):
-            handles.append(
+            surface_handles.append(
                 _plot_series(
                     ax,
                     surface[name],
@@ -182,7 +182,7 @@ def _add_domain_state_panel(
             zorder=0,
             label="T2m mean to q90",
         )
-        handles.append(band)
+        handles = [*surface_handles, band, *handles]
     style.pad_y_limits(ax, fraction=0.08)
     style.inside_legend(ax, handles, [handle.get_label() for handle in handles], ncol=2)
 
@@ -222,7 +222,6 @@ def _add_tendency_panel(ax, terms: dict[str, xr.DataArray], *, units: str, daily
     ]
     style.zero_line(ax)
     ax.set_ylabel(units)
-    ax.set_title("Temperature tendency", loc="left", pad=4)
     style.inside_legend(
         ax,
         lines,
@@ -281,7 +280,6 @@ def _add_budget_terms_panel(
 
     style.zero_line(ax)
     ax.set_ylabel(units)
-    ax.set_title("Heat-budget terms", loc="left", pad=4)
     style.inside_legend(
         ax,
         lines,
