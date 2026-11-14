@@ -67,7 +67,7 @@ to a 3.5-inch manuscript column gives approximately 10.5/6.1 pt text.
 Top-panel height remains 1.6 times either lower panel. Panel titles are omitted.
 The temperature legend groups all three T2m entries in its first column and
 the two volume-temperature entries in its second. Visible left-hand whitespace
-is reduced to 75% of the previous margin, measured outside the complete labels
+is trimmed to 25% of the untrimmed margin, measured outside the complete labels
 to avoid clipping the wider hourly ticks. Both daily budget axes
 prefer integer ticks; fractional ticks are retained for sub-unit ranges so
 distinct values are not rounded to the same label. Hourly tick precision is

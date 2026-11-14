@@ -536,7 +536,7 @@ def test_end_to_end_inventory_manifest_and_no_overwrite(campaign):
     assert manifest["layout"]["legend_font_size_pt"] == 10.5
     assert manifest["layout"]["supplemental_footer"] is False
     assert manifest["layout"]["panel_titles"] is False
-    assert manifest["layout"]["left_whitespace_scale"] == 0.75
+    assert manifest["layout"]["left_whitespace_scale"] == 0.25
     assert manifest["layout"]["crop"] is False
     assert len(manifest["outputs"]) == 3
     for output in manifest["outputs"]:
